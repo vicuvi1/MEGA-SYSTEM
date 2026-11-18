@@ -6309,3 +6309,23 @@ html[data-in-life] .lt-eye svg { width: 18px; height: 18px; fill: none; stroke: 
 .mini-months.mm12 { grid-template-columns: repeat(12, 1fr); gap: 4px; }
 @media (max-width: 640px) { .src-bars { height: 120px; gap: 3px; } .sb-l { font-size: 9px; } }
 @media (prefers-reduced-motion: reduce) { .sb-stack, .src-chip, .src-chip[aria-pressed="true"], .src-row { animation: none; } .src-chip, .src-sw { transition: none; } }
+/* Year summary (Reports → Year in review) */
+.ys-top { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 4px 0 8px; }
+.ys-top > div { display: grid; gap: 2px; }
+.ys-top .k, .ys-nw .k { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.ys-top b { font-size: 20px; }
+.ys-bars { margin-top: 14px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 6px; align-items: end; margin: 6px 0 4px; }
+.ys-m { display: grid; gap: 6px; justify-items: center; }
+.ys-m span { font-size: 11px; color: var(--muted); }
+.ys-m.none { opacity: 0.45; }
+.ys-bb { height: 160px; width: 100%; display: flex; gap: 2px; align-items: flex-end; justify-content: center; }
+.ys-bb i { width: min(16px, 40%); border-radius: 4px 4px 0 0; transform-origin: bottom; animation: grow-y 0.7s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 35ms + 120ms); }
+.ys-bb i.in { background: var(--income); }
+.ys-bb i.out { background: var(--expense); }
+.ys-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 8px; }
+/* these rows have no avatar column */
+.ys .tx { grid-template-columns: minmax(0, 1fr) auto; }
+.ys .tx .amount { display: inline-flex; gap: 8px; align-items: baseline; justify-content: flex-end; }
+.ys .tx { animation: rise 0.45s var(--ease-out) both; animation-delay: calc(var(--i, 0) * 50ms + 200ms); }
+@media (max-width: 700px) { .ys-top { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ys-cols { grid-template-columns: 1fr; } .ys-bb { height: 110px; } }
+@media (prefers-reduced-motion: reduce) { .ys-bb i, .ys .tx { animation: none; } }

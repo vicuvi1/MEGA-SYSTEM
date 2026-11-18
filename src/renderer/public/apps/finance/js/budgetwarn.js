@@ -10,6 +10,7 @@
 import { budgetStatus } from './model.js';
 import { monthKey } from './dates.js';
 import { isMoneyHidden } from './money.js';
+import { kindCrossings } from './budgets.js';
 
 export const LEVELS = [80, 100];
 
@@ -30,6 +31,8 @@ export function budgetCrossings(state, today) {
     if (!level) continue;
     out.push({ month, cat: r.category.id, name: r.category.name, level, pct: Math.floor((r.spent / r.budget) * 100), spent: Math.round(r.spent), budget: r.budget });
   }
+  // Weekly, yearly, tag and trip budgets (js/budgets.js) warn the same way.
+  for (const c of kindCrossings(state, today)) out.push(c);
   return out;
 }
 

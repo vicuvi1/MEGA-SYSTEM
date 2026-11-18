@@ -18,6 +18,8 @@ export interface BudgetCrossing {
   pct: number
   spent: number
   budget: number
+  /** "this week's", "this year's", "the" (a trip): how the budget is named in the text. Missing = "this month's". */
+  label?: string
 }
 
 const MONTH = /^\d{4}-\d{2}$/
@@ -36,7 +38,7 @@ export function alreadyInBell(ids: readonly string[], month: string, cat: string
 /** "Food: 80% of this month's budget used (1 600 of 2 000 MDL)"; amounts left out when hidden. */
 export function budgetNoticeText(c: BudgetCrossing, currency: string, hideAmounts: boolean): string {
   const pct = Math.max(c.level, Math.floor(c.pct))
-  const head = `${c.name}: ${pct}% of this month's budget used`
+  const head = `${c.name}: ${pct}% of ${c.label || "this month's"} budget used`
   if (hideAmounts) return head
   const spent = totalText(c.spent, currency).replace(/\s*[A-Z]{3}$/, '')
   return `${head} (${spent} of ${totalText(c.budget, currency)})`

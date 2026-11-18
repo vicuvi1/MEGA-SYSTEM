@@ -1077,33 +1077,33 @@
    "evidence": "2026-11-10: unit and server tests pass (clock pinned, made-up data); smoke 'Food photo extras: …', 'Desktop island food notice: …', 'Settings AI cost: …', the full smoke run passes (Settings → Ben: pushes 1.71, cost 1.12 of 2 screens; Pushes folds meals, coach nudges and the weekly check).",
    "notes": "core/foodScore.ts, foodBarcode.ts, foodLeftovers.ts, foodInsights.ts, foodTiming.ts, aiCost.ts, islandFood.ts; main/foodInsights.ts; api/_vision.mjs lookupBarcode + photos:<month>, api/ai.mjs photoCost; body/FoodGallery.tsx, FoodCharts.tsx, AiCostPanel.tsx; web/bots/foodBot.ts (after photos, type button, label foods, protein left, summary, usual times)."
   },
- {
-    "id": "F906",
-    "priority": 1,
-    "area": "sport",
-    "title": "Sport Track design, batch A: Dashboard, Workout, swap sheet (Change ›) and Gear",
-    "user_visible_behavior": "The Dashboard and Workout follow the approved design (docs/design/sport-track): greeting, an 'Am I growing?' chip, 4 tiles, the level ring, a large real photo demo (two frames cross-fading), a thumbnail and Change › on every move, the Coach, a 5-step path with its unlock box, This week, and Body / Food (Paste from AI ›) / 12-week program tiles. Workout is the set-by-set flow in the page (big current move, set tiles, reps, Easy / OK / Hard, Log set, the moves after it with drag order, a big rest timer with +30 s / Skip / sound, Ready to unlock with Apply from next workout / Keep, form check). Change › opens a sheet with the move's chain (easier steps, your step, next, a side option, locked ones named) with photos; Use … today changes today only, Make it my step is a level change. Gear (edit gear on the Dashboard and Exercises) says what you can train with; the plan only uses moves that gear allows (a weak desk or no table never means table rows).",
-    "status": "passing",
-    "verification": [
-       "npx vitest run src/core/trainGear.test.ts src/core/sportTrain.test.ts src/core/trainLog.test.ts",
-       "SMOKE_ONLY=\"Sport Track\" npm run smoke"
-    ],
-    "evidence": "2026-11-10: branch build-a-sport-design; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Dashboard 2.06 / 1.34 / 1.25 screens at 1280 / 1440 / 1920 (budget 2.5, 2.25 with 10% headroom); screenshots kept outside the repo.",
-    "notes": "core/trainGear.ts (gear, needs per move, fallbacks, one-day picks), core/trainSwap.ts (swapView, makeStep, gearPlan), core/trainLog.ts (sessionItems follows gear and picks; trainOf reads trainGear / trainPicks; mergeTrain), core/trainLadders.ts (6 new how-to moves: band, dumbbell, ring, door towel, backpack rows, floor pulls). renderer/src/training/SwapSheet.tsx, GearView.tsx, MovePic.tsx (DemoPic), WorkoutFlow.tsx (useWorkoutFlow + FinishOverlay), SportDashboard.tsx, SportWorkout.tsx. Gear is stored in Sport Track's synced state (trainGear, newer device wins) and described under settings.sport_tracker_json in settingsKeys.ts. Not in batch A: Exercises restyle, Progress path progress, Body & Food restyle, the Growth view."
- },
   {
-      "id": "F-SPORT-DESIGN-B",
-      "priority": 1,
-      "area": "sport",
-      "title": "Sport Track design batch B: Exercises, Progress path bars, Body & Food, Am I really growing?",
-      "user_visible_behavior": "Exercises: a search, six paths with your step (3 / 8), a link to what you own (Gear), the chosen path as step cards (Mastered, You are here, Next with the sessions to go, Locked) with the real photo demo cross-fading, a locked step without a photo says \"Demo opens when unlocked\", and a detail panel (big demo, sets, reps, rest, your best, form tips, Make easier / Make harder that keep your history). Progress: a period switch (Week, 4 weeks, 12 weeks), four numbers, strength over time with the steps up marked, Ready today, Path progress (one segmented bar per path, your step part-filled by its real unlock progress, \"NN% to <next>\", the unlock checks with your real values), personal records and the 12-week program; the older recovery, warnings, challenges and logging by hand sit folded under More. Body & Food: four numbers (protein left with a food idea, calories, weight, quick log), 1 Copy the food prompt (Copy, Show all of it), 2 Paste the AI's answer (live preview, Log all, Save as repeat meal), Repeat meals as tiles (double-click logs); the Dashboard's \"Paste from AI\" lands on step 2. Am I really growing? (from the Dashboard chip): a verdict with a growth score ring and one honest sentence, six signs (strength, weight against the +0.4 to +0.8 kg a month zone, waist, hard sets per muscle, protein days, sleep) each Good / Improve / Fix with a bar, To grow faster, a weight and waist chart with the band, and a photo check linking the Photo Locker. With too little logged it makes up nothing and says exactly what to log. No points.",
-      "status": "passing",
-      "verification": [
-          "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/trainProgress.test.ts src/core/growthCheck.test.ts",
-          "SMOKE_ONLY=\"Sport Track|Body & Food\" npm run smoke"
-      ],
-      "evidence": "2026-11-10: tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Exercises 1.59 / 1.17 / 1.01 screens at 1280 / 1440 / 1920 (budget 1.95), Progress 2.97 / 2.53 / 2.09 (budget 3.6), Body & Food top (numbers, steps, Repeat meals) 1.37 / 1.22 / 1.00 (budget 1.9), Growth 2.25 / 1.88 / 1.58 (budget 2.8), all with 10% headroom; 1920 screenshots compared with the artboards.",
-      "notes": "core/trainProgress.ts (pathProgress, pathViews, kpisFor, strengthChart, personalRecords), core/growthCheck.ts (growthCheck, growthChart: the six signs and the verdict, pure, clock pinned in the tests). renderer/src/training/SportExercises.tsx, SportProgress.tsx, GrowthView.tsx, SportMore.tsx (the folded older parts), sport-batch-b.css; renderer/src/body/FoodBoard.tsx, FoodPaste.tsx (step 2), FoodCounter.tsx (board mode), food-board.css. No new data: everything is read from the Sport Track state, the body log and the food counter; the lean-gain zone is a device setting (life_growth_zone)."
+   "id": "F906",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track design, batch A: Dashboard, Workout, swap sheet (Change ›) and Gear",
+   "user_visible_behavior": "The Dashboard and Workout follow the approved design (docs/design/sport-track): greeting, an 'Am I growing?' chip, 4 tiles, the level ring, a large real photo demo (two frames cross-fading), a thumbnail and Change › on every move, the Coach, a 5-step path with its unlock box, This week, and Body / Food (Paste from AI ›) / 12-week program tiles. Workout is the set-by-set flow in the page (big current move, set tiles, reps, Easy / OK / Hard, Log set, the moves after it with drag order, a big rest timer with +30 s / Skip / sound, Ready to unlock with Apply from next workout / Keep, form check). Change › opens a sheet with the move's chain (easier steps, your step, next, a side option, locked ones named) with photos; Use … today changes today only, Make it my step is a level change. Gear (edit gear on the Dashboard and Exercises) says what you can train with; the plan only uses moves that gear allows (a weak desk or no table never means table rows).",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/core/trainGear.test.ts src/core/sportTrain.test.ts src/core/trainLog.test.ts",
+    "SMOKE_ONLY=\"Sport Track\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: branch build-a-sport-design; tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Dashboard 2.06 / 1.34 / 1.25 screens at 1280 / 1440 / 1920 (budget 2.5, 2.25 with 10% headroom); screenshots kept outside the repo.",
+   "notes": "core/trainGear.ts (gear, needs per move, fallbacks, one-day picks), core/trainSwap.ts (swapView, makeStep, gearPlan), core/trainLog.ts (sessionItems follows gear and picks; trainOf reads trainGear / trainPicks; mergeTrain), core/trainLadders.ts (6 new how-to moves: band, dumbbell, ring, door towel, backpack rows, floor pulls). renderer/src/training/SwapSheet.tsx, GearView.tsx, MovePic.tsx (DemoPic), WorkoutFlow.tsx (useWorkoutFlow + FinishOverlay), SportDashboard.tsx, SportWorkout.tsx. Gear is stored in Sport Track's synced state (trainGear, newer device wins) and described under settings.sport_tracker_json in settingsKeys.ts. Not in batch A: Exercises restyle, Progress path progress, Body & Food restyle, the Growth view."
+  },
+  {
+   "id": "F-SPORT-DESIGN-B",
+   "priority": 1,
+   "area": "sport",
+   "title": "Sport Track design batch B: Exercises, Progress path bars, Body & Food, Am I really growing?",
+   "user_visible_behavior": "Exercises: a search, six paths with your step (3 / 8), a link to what you own (Gear), the chosen path as step cards (Mastered, You are here, Next with the sessions to go, Locked) with the real photo demo cross-fading, a locked step without a photo says \"Demo opens when unlocked\", and a detail panel (big demo, sets, reps, rest, your best, form tips, Make easier / Make harder that keep your history). Progress: a period switch (Week, 4 weeks, 12 weeks), four numbers, strength over time with the steps up marked, Ready today, Path progress (one segmented bar per path, your step part-filled by its real unlock progress, \"NN% to <next>\", the unlock checks with your real values), personal records and the 12-week program; the older recovery, warnings, challenges and logging by hand sit folded under More. Body & Food: four numbers (protein left with a food idea, calories, weight, quick log), 1 Copy the food prompt (Copy, Show all of it), 2 Paste the AI's answer (live preview, Log all, Save as repeat meal), Repeat meals as tiles (double-click logs); the Dashboard's \"Paste from AI\" lands on step 2. Am I really growing? (from the Dashboard chip): a verdict with a growth score ring and one honest sentence, six signs (strength, weight against the +0.4 to +0.8 kg a month zone, waist, hard sets per muscle, protein days, sleep) each Good / Improve / Fix with a bar, To grow faster, a weight and waist chart with the band, and a photo check linking the Photo Locker. With too little logged it makes up nothing and says exactly what to log. No points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/trainProgress.test.ts src/core/growthCheck.test.ts",
+    "SMOKE_ONLY=\"Sport Track|Body & Food\" npm run smoke"
+   ],
+   "evidence": "2026-11-10: tsc, full vitest and the full smoke run (CHROMIUM_PATH chromium-1243); Exercises 1.59 / 1.17 / 1.01 screens at 1280 / 1440 / 1920 (budget 1.95), Progress 2.97 / 2.53 / 2.09 (budget 3.6), Body & Food top (numbers, steps, Repeat meals) 1.37 / 1.22 / 1.00 (budget 1.9), Growth 2.25 / 1.88 / 1.58 (budget 2.8), all with 10% headroom; 1920 screenshots compared with the artboards.",
+   "notes": "core/trainProgress.ts (pathProgress, pathViews, kpisFor, strengthChart, personalRecords), core/growthCheck.ts (growthCheck, growthChart: the six signs and the verdict, pure, clock pinned in the tests). renderer/src/training/SportExercises.tsx, SportProgress.tsx, GrowthView.tsx, SportMore.tsx (the folded older parts), sport-batch-b.css; renderer/src/body/FoodBoard.tsx, FoodPaste.tsx (step 2), FoodCounter.tsx (board mode), food-board.css. No new data: everything is read from the Sport Track state, the body log and the food counter; the lean-gain zone is a device setting (life_growth_zone)."
   },
   {
    "id": "F-SPORT-WORKOUT-MODE",
@@ -1124,7 +1124,7 @@
    "priority": 1,
    "area": "today",
    "title": "Feature freeze: Today shows 3 numbers, an honest day score, at most 4 pushes a day, Ben has one job, Simple mode",
-   "user_visible_behavior": "Today \u2192 Now shows only sleep (asleep by 23:30, up by 06:45), focus blocks started and must-dos out of 3, the next calendar block and the day score; the rest is under More. The day score is sleep 34 + focus 33 + must-dos 33 (out of 3), so an empty day is 0. At most 4 pushes a day (07:00, 21:15, 23:00, optional afternoon; Sunday 18:00 summary), neutral words; everything else is silent in the bell. From 21:15 Today and Ben ask for tomorrow's 3 and refuse vague items. One 'go to sleep' a night after 23:15. Simple mode (on) hides loot, coupons and shields, goal check-ins, focus goals and Tasks.",
+   "user_visible_behavior": "Today → Now shows only sleep (asleep by 23:30, up by 06:45), focus blocks started and must-dos out of 3, the next calendar block and the day score; the rest is under More. The day score is sleep 34 + focus 33 + must-dos 33 (out of 3), so an empty day is 0. At most 4 pushes a day (07:00, 21:15, 23:00, optional afternoon; Sunday 18:00 summary), neutral words; everything else is silent in the bell. From 21:15 Today and Ben ask for tomorrow's 3 and refuse vague items. One 'go to sleep' a night after 23:15. Simple mode (on) hides loot, coupons and shields, goal check-ins, focus goals and Tasks.",
    "status": "passing",
    "verification": [
     "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/threeNumbers.test.ts src/core/notifyBudget.test.ts src/core/mustDoRule.test.ts src/core/benOneJob.test.ts src/core/simpleMode.test.ts src/server/castle.test.ts src/server/benOneJob.server.test.ts",
@@ -1133,222 +1133,221 @@
    "evidence": "2026-11-11: branch simplify-three-numbers; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); a real screenshot of the new Today at 1920x1080 kept outside the repo.",
    "notes": "core/threeNumbers.ts, core/notifyBudget.ts, core/mustDoRule.ts, core/benOneJob.ts, core/simpleMode.ts; ThreeToday.tsx, settings/simple.tsx, useSimple.ts, NotifToasts.tsx; server/telegramBot.ts (send gate, budgetTick, runDaily), web/webBots.ts (pick, night), desktop/main.ts (desktop:notify cap)."
   },
- {
-  "id": "F-USABLE-CORE",
-  "priority": 1,
-  "area": "today",
-  "title": "Usability pass: a 4-item menu with a closed Archive, and the 7 daily flows with fewer clicks",
-  "user_visible_behavior": "Simple mode's menu is Today, Study Time, Sport Track and Money, then Settings; every other page is in one closed Archive group (Settings → Simple mode brings any back; Ctrl+K finds all; Alt+number follows the menu). Today logs last night in place, names the must-do its Start button starts, shows a running block with Stop, and offers Set tomorrow's 3 at any hour. Starting focus no longer dims the app or asks a goal; stopping no longer asks twice. Study Time, Sport Track's Dashboard and Workout done have one main button each; no dead demo buttons; repeat meals have + Log; the island's Stop shows the time and water shows the day so far. Text 15 px.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/simpleMode.test.ts",
-   "SMOKE_ONLY=\"Today shows 3|island in Simple mode|Simple mode\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch usability-core; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); before/after walks of the 7 flows at 1920x1080 kept outside the repo.",
-  "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner)."
- },
- {
-  "id": "F-SEC-HUNT-NOV",
-  "priority": 1,
-  "area": "security",
-  "title": "Security hunt fixes: no PIN hash in settings, web push keeps to the budget, 503 on a database hiccup, tick needs a session or the secret",
-  "user_visible_behavior": "The PIN hash is no longer copied into the synced settings (a signed-in page could read and crack it); the server deletes any old copy. Each device keeps its own offline copy after an online unlock; a device that never unlocked online needs the internet once. Phone push only wakes for the day's budgeted messages (at most 4). Bot health and Settings → Plugins refresh say 'try again' instead of signing out when the database hiccups. /api/cron?job=tick needs the app's session or CRON_SECRET. /api/db refuses every server sys_* table, pragma_* functions, dbstat and sqlite_dbpage. The URL guard refuses IPv4 hidden in IPv6.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/securityHunt.test.ts src/renderer/src/web/server.test.ts",
-   "npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch security-hardening-pin; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "api/_lib.mjs (authState cleanup, changePin), api/_sqlguard.mjs (PAGE_SYS_TABLES, SECRET_KEYS, INTERNAL), api/_push.mjs (PUSHABLE), api/bot-setup.mjs, api/cron.mjs, api/google.mjs (stateOk), src/core/netGuard.ts, web/webAuth.ts (localPinStore), tursoWebBridge.ts. Decision in DECISIONS.md."
-   },
-   {
-  "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner). The Archive menu was replaced the same day by the module switch (F-MODULE-SWITCH)."
- },
- {
-  "id": "F-MODULE-SWITCH",
-  "priority": 1,
-  "area": "today",
-  "title": "Module switch: each part of the app ON or OFF; by default only Today, Money, Sleep, Sport Track and Discipline",
-  "user_visible_behavior": "Settings \u2192 Modules lists every part with one line and a switch. Off means off: gone from the menu, Ctrl+K, Alt+number, Today, the island and notifications; its background jobs stop on the PC and the server; its Telegram commands answer \"This part is switched off. Turn it on in Settings \u2192 Modules\". Turning one on brings it back at once with its data. The Dynamic island is a module too, off by default: no island window; your own timers then end with the in-app chime and a Windows notification. Today keeps the 3 numbers with Study Time and Tasks off. The Archive group is gone.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/modules.test.ts src/core/simpleMode.test.ts src/server/modules.server.test.ts",
-   "SMOKE_ONLY=\"Modules:|Simple mode\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch module-switch; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); real 1920x1080 screenshots of the sidebar + Today and of Settings \u2192 Modules kept outside the repo.",
-  "notes": "core/modules.ts (registry, readModules, menuPages, altPage, jobOn, offReply, notifOn, islandWithout), settingsKeys modules_on, tursoWebBridge life.modules, useModules.ts, ModuleOff.tsx, settings/modules.tsx, Sidebar.tsx, App.tsx, Palette.tsx, pages/Today.tsx, ThreeToday.tsx, todayEvents.ts, NotifToasts.tsx, Notifications.tsx, capture.ts, coachUnread.ts, vault/driveSync.ts, automationsFeed.ts, IslandFeed.tsx, DesktopIsland.tsx; web/webBots.ts (offReply, Coach off); server/telegramBot.ts (runTick parts, runDaily, runPlugins, Todoist pay); desktop/island.ts (setModule, island:module), main.ts (tray, timer: notifications), preload.ts. Money's own code untouched."
-   },
-   {
- },
- {
-  "id": "F-MONEY-SIX",
-  "priority": 1,
-  "area": "money",
-  "title": "Money fixes: foreign currency, import rates, one spending rule, decimals, one no-spend button, faster saves",
-  "user_visible_behavior": "A 10 EUR quick add or Telegram entry counts as its MDL value (through USD), not 10 MDL; Finance Home offers a one-time 'Re-price N past entries' review (before and after, confirm, Undo). An import preview warns 'No EUR→MDL rate for 12 rows: they would count 1:1' with Fetch rates, Set rate or Skip these rows, and Import waits. The Money hub's totals leave out points-only reward buys like Finance's donut. Single amounts show their bani (12,50 MDL) with Finance Helper's own formatter; totals are whole; the label is MDL everywhere. One 'Nothing spent today' button. Finance saves wait a moment and write once; Telegram entries still waiting after 50 days get a warning with Apply now on the Money page and are never dropped silently.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyFixes.test.ts src/renderer/src/web/honestMoney.test.ts src/core/moneyHub.test.ts",
-   "SMOKE_ONLY=\"Money amounts|Finance import|No spending|Money hub|Finance categories\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-six-fixes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "finance/js/fx.js rateToBase + rateOnDay, reprice.js + screens/reprice.js, importer.js rateGaps/fillRate/fillKnownRates/skipNoRate + screens/rategaps.js (CSV, workbook, bank imports), store.js saveSoon/flushSave/onSaved, sync.js mergeLocal; web/financeBot.ts, web/moneyHub.ts (countsAsSpending), web/appSync.ts (cheap noteEdit), web/financeInbox.ts (keepInbox, inboxWarning), web/moneyApi.ts (inboxWarning, applyInbox), core/moneyText.ts, core/moneyHub.ts leiText, pages/Money.tsx, MoneyQuick.tsx, DayFlow.tsx, EmbedHost.tsx, main/money.ts."
- },
- {
-  "id": "F-SYNC-LOSS",
-  "priority": 1,
-  "area": "data-sync",
-  "title": "Sync merges keep both devices' changes",
-  "user_visible_behavior": "When two devices changed the same thing, nothing is lost: an exercise added on one device stays (a deleted one stays deleted), a past day keeps the reps from both, a Waky morning keeps its time and its mood, and a weight or a position edited offline is no longer added up (the later change wins). A device whose clock is behind no longer loses edits made after it saw the other copy. A damaged offline queue in the browser is backed up and never written over.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/syncDataLoss.test.ts src/renderer/src/web/desktopSync.test.ts src/renderer/src/web/sportSync.test.ts src/renderer/src/web/appSync.test.ts src/renderer/src/web/mirror.test.ts",
-   "npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch fix/sync-data-loss; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "web/desktopSync.ts (COUNTER_KEYS, merge3 serverLater, mergeRow), web/appSync.ts (SEEN timeline, EDITED cleared, mergeEntry/mergeEntries, mergeWaky), web/sportSync.ts (exercise union + exercises in lists, past days field by field), web/mirror.ts (outbox backup life_offline_writes_unreadable_<ms>, outboxLocked). Unit tests only: no UI change, so no smoke step."
-   },
-   {
-  "id": "F-SLEEP-DISC-FOOD-PICKS",
-  "priority": 1,
-  "area": "health",
-  "title": "Food reader fixes; one meaning of on time; bedtime check; 23:15 and 00:00 reminders; one Discipline day number",
-  "user_visible_behavior": "Pasted food: 1,500 g and KCAL 1,200 read as thousands, a 01:30 meal lands on the evening before, a note starting with Fat/Carbs stays a note. Sleep: on time is asleep by 23:30 and up by 06:45 with 5 min grace everywhere (points, streak, Today, score, pill); Today and Sleep name the targets. Going to bed then 30+ min more at the PC takes the bed points back and sets the bedtime to the last PC use, said in plain words on Sleep and in the bell. Windows notifications at 23:15 and 00:00 when Sleep is on and bed is not logged. Discipline: the ring, the campaign, Today and the alert all say the same Day N; undoing a reset removes its comeback check-ins and nothing is sent to Todoist or Ben while those modules are off; check-in hours use the configured time zone.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/foodPaste.test.ts src/core/sleep.test.ts src/core/threeNumbers.test.ts src/core/bedSense.test.ts src/core/notifyBudget.test.ts src/main/sleep.test.ts src/main/discipline.test.ts",
-   "SMOKE_ONLY=\"One day number on Discipline\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch sleep-discipline-food-picks; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "core/foodPaste.ts, core/sleep.ts, core/threeNumbers.ts, core/bedSense.ts, core/notifyBudget.ts, core/discipline.ts dayShown, core/comeback.ts, core/dates.ts hourIn, main/sleep.ts bedActivity, main/discipline.ts, main/wallet.ts hour, desktop/main.ts sleep tick, renderer sleepNight.ts, ThreeToday.tsx, pages/Sleep.tsx, pages/Discipline.tsx."
- },
- {
-  "id": "F-MONEY-TRUST-1",
-  "priority": 1,
-  "area": "money",
-  "title": "Money trust phase 1: monthly reconciliation, full export and import back, every total proved",
-  "user_visible_behavior": "Reconcile an account against the bank: type the real balance, see the difference with the app's balance that day and what could explain it (an entry of that amount, likely duplicates, recurring items not logged, entries since the last check), or add one labelled 'Reconciliation adjustment' that is not income or spending; Undo takes it out. 'Reconcile: due' on the Money page and Finance Accounts after 31 days. One click exports every record with every field (CSV with a BOM, plus an Excel file with accounts, invoices, clients, recurring items, goals and reconciliations); importing that CSV back shows a preview and adds only new records. Finance and the Money hub now give the same totals (points buys, recurring bills in USD, money logged ahead, foreign accounts without live rates).",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyTrust.test.ts src/renderer/src/web/moneyReconcile.test.ts",
-   "SMOKE_ONLY=\"Money\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-trust-phase1; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js/reconcile.js, moneyexport.js, screens/reconcile.js, screens/moneyio.js, catshare.js (isCorrection, countsAsIncome), model.js (counts, reconciliations, rebuiltTotal knownRates), safespend.js (up to today, knownRates, countsAsSpending), forecast.js, importer.js (rateOnDay, previewTotal), sync.js (reconciliations, tie-break), history.js, app.js (goto, export button, import detection, Reconciliation pill), screens/accounts.js, sw.js v39; web/moneyHub.ts (reconcile, ruleInBase), pages/Money.tsx ReconcileDue."
- },
- {
-  "id": "F-MONEY-LONG-VIEW",
-  "priority": 2,
-  "area": "money",
-  "title": "Money phase 4: the long view (net worth over time, savings rate, this year vs last, runway)",
-  "user_visible_behavior": "Finance → Reports → Long view: 4 numbers at the top (net worth and its change this year, this year's savings rate with its trend, spending so far against the same days last year, runway). Net worth month by month or year by year (chart plus table, saved snapshots marked), and what each account adds in the month you tap. Savings rate per month and per year. Each category this year against last year (so far or full year) with the biggest increases and decreases. Runway: 'You could live N months on your savings' from the last 3, 6 and 12 months. MDL by default; USD or EUR convert at the rate of each day. A book filter shows when records have books. The Money page's Month tab has one card with net worth, this year's change, the savings rate and the runway, and 'See it all' opens the screen. Read only.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLongView.test.ts",
-   "SMOKE_ONLY=\"Money long view\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-phase4-longview; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js/longview.js (pure), screens/longview.js, css/longview.css (loaded by the screen); app.js: import, SUB_TABS, NAV_PARENT, SCREENS, goto 'longview'; sw.js 3 lines; web/moneyLong.ts, MoneyLong.tsx, moneyLong.css; web/moneyApi.ts adds view.long (not in moneyHub.ts, so the bot bundle is unchanged); pages/Money.tsx one card."
- },
- {
-  "id": "F-PHONE-PAY-1",
-  "priority": 1,
-  "area": "money",
-  "title": "Phone payments backend: MacroDroid notifications to To sort (money_tosort), keys, Telegram paste",
-  "user_visible_behavior": "Settings → Phone payments: make or remove a key per phone, the exact MacroDroid steps (Notification received from maib, Google Wallet, Revolut, Paynet → HTTP POST to /api/cron?job=pay with Authorization: Bearer <key> and the body template), Send test, and the last 5 notifications received with what was read. Each payment is saved at once in To sort (money_tosort), in its own currency, and never goes into Finance Helper before a tap. maib + Google Wallet for one tap is kept once. Declined, codes and money in are skipped with a reason; an unreadable one is kept to sort by hand. Pasting a notification to the finance bot does the same. No points until sorted on the day.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/payNotify.test.ts src/core/moneyToSort.test.ts src/renderer/src/web/phonePay.test.ts src/renderer/src/web/healthKeys.test.ts",
-   "SMOKE_ONLY=\"Phone payments\" npm run smoke"
-  ],
-  "evidence": "2026-11-13: branch phone-payments; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "core/payNotify.ts (+ fixtures), core/moneyToSort.ts, core/moneyDays.ts logMoment, web/phonePay.ts, web/webServices.ts financeDayTx, web/webBots.ts (paste), server/telegramBot.ts phonePay, api/_health.mjs (key kinds, payRequest, readPayBody), api/cron.mjs job=pay, settings/phonePay.tsx, bridge plugins.phonePay, settingsKeys money_tosort, e2e/server.mjs job=pay. The To sort card UI is the next batch."
- },
- {
-  "id": "F-DATA-SAFETY",
-  "priority": 1,
-  "area": "data",
-  "title": "No data loss: cloud backup in parts, local zip every day, backup before risk with undo, tested restore, Data safety page",
-  "user_visible_behavior": "Settings → Data safety: green/amber/red for the cloud backup, the backup on this PC, the weekly off-site copy and the last restore test, the size, Back up now, Test a restore (desktop), Export everything (one zip: CSV + JSON), Restore from file (.zip or .json), the backup folder (default Documents/LifeSystem/Backups, Change), Undo to before X, daily and cloud backups with Restore. Today shows a small red dot next to its title only when something is red, and a red state is one of the 4 daily notifications. A cloud backup of any size is saved (in parts); a restore saves a backup of today first, goes all or nothing in foreign-key order, puts the apps' data back and no device merges its old copy back in.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-   "npx vitest run src/server/cloudParts.test.ts src/desktop/localBackups.test.ts src/renderer/src/web/backupBeforeRisk.test.ts src/renderer/src/web/restoreDrill.test.ts src/core/backupPlan.test.ts src/core/dataSafety.test.ts src/renderer/src/safety/backupFiles.test.ts",
-   "SMOKE_ONLY=\"Data safety\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch data-safety; tsc, full vitest (4336) and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "core/backupPack.ts, backupCheck.ts, backupPlan.ts (restorePlan, fkOrder, markRestoredApps, localBackupsToDelete), riskChange.ts, dataSafety.ts, zip.ts; api/_snapshots.mjs (parts), db.mjs {snapshotPart}, cron.mjs job=backup list/part and job=offsite; web/cloudBackup.ts, restoreApps.ts, restoreDrill.ts, appSync.ts (restore id, big-change guard); desktop/localBackups.ts, backups.ts; renderer safety/*; .github/workflows/backup.yml; docs/RECOVERY.md. No schema change (server tables made with CREATE TABLE IF NOT EXISTS)."
- },
- {
-  "id": "F-MONEY-TAXES-3",
-  "priority": 1,
-  "area": "money",
-  "title": "Money v2 phase 3: tax tags, the yearly tax summary, the accountant export and receipts in Google Drive",
-  "user_visible_behavior": "Finance Helper → Reports → Taxes: 'Not tax advice: check with an accountant.' on every view; the tax situation (individual entrepreneur by default, individual, IT Park, or not set = totals only) with dated, sourced numbers you can change; taxable income, deductible costs, non-taxable income and VAT for the year, by source, by category, by book and month by month, totals also in USD or EUR at today's rate; a rough estimate and the deadline. Tag records one by one, many at once (also from the Log table's bulk bar) or once per category. 'Excel for your accountant' saves one .xlsx (Entries with a Drive link per receipt, and Totals). A cost's edit sheet has 'Attach receipt' (photo or PDF): kept on this device at once, then uploaded to Google Drive 'Life System/Receipts/YYYY-MM'; while Drive is not connected it waits and goes later.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeTax.test.ts src/renderer/src/web/financeAccountant.test.ts src/core/receiptIndex.test.ts src/renderer/src/money/receipts.test.ts",
-   "SMOKE_ONLY=\"Money taxes\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-phase3-taxes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js/tax.js, taxprofiles.js, accountant.js, receipts.js, screens/taxes.js, css/tax.css; app.js (Taxes tab, bulk 'Tax tag…', sheet row, keepOnEdit); core/receiptIndex.ts; renderer/src/money/receipts.ts + receiptBridge.ts; EmbedHost.tsx (2 hooks); tursoWebBridge.ts moneyReceipts; settingsKeys money_receipts; modules.ts receiptUpload; vault/driveApi.ts hides receipt folders; e2e/smokeTaxes.mjs. Not tried against the real Google Drive yet (fakes only)."
- },
- {
-  "id": "F-MONEY-5A",
-  "priority": 1,
-  "area": "money",
-  "title": "Money phase 5a: learned category rules, To sort card, bills to confirm, Telegram uses the rules",
-  "user_visible_behavior": "Categories are learned from what you chose before (LINELLA 23 = Linella), with how sure the app is. Phone payments wait in a To sort card on the Money page with 3 category chips and Other… (an unreadable one asks for the amount); one tap files one and teaches a rule, and the next one from that merchant is filed by itself, marked auto, with OK, Change and Undo. Recurring bills that are due wait for one tap (Paid / Didn't happen). A Rules card lists, edits and deletes rules and shows what was learned. On Telegram the reply says which category it chose and how sure, with a change button, and three buttons when not sure. Auto-filed entries pay no points.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLearn.test.ts src/renderer/src/web/moneySort.test.ts src/renderer/src/web/financeBot.test.ts",
-   "SMOKE_ONLY=\"Money to sort\" npm run smoke"
-  ],
-  "evidence": "2026-11-12: branch money-phase5; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js/learn.js (new), model.js (suggestCategory sure merchant, addRule/removeRule via learn.js, keptOnEdit), app.js (edit keeps unknown fields), sync.js (rules list merge), sw.js v42; web/moneySortCore.ts, web/moneySort.ts, money/ToSortCard.tsx, money/RulesCard.tsx, money/sort.css (new); web/financeBot.ts (learnCategory, saveFinance), core/moneyDays.ts (countsAsLogged on logMoment), core/moneyToSort.ts (auto, reopen; keepToSort keeps reopen), core/moneyText.ts typedBani, tursoWebBridge.ts, bridge.ts, pages/Money.tsx."
- },
- {
-  "id": "F-MONEY-WHERE",
-  "priority": 2,
-  "area": "money",
-  "title": "Money: Where your money goes, old look back plus Everyday only",
-  "user_visible_behavior": "Centred donut with callout labels that never overlap, and full-width rows (icon, name, share bar, amount, round % badge) with stored category colours; change pills, budget text and records in the second line; rows open in place; hover links row and slice. Everything / Everyday only toggle (leaves out work-cost categories and one-offs, says how much)",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-   "SMOKE_ONLY=\"Finance categories\" npm run smoke"
-  ],
-  "evidence": "2026-11-13: tsc, vitest (financeEveryday.test.ts), smoke steps Finance categories (2).",
-  "notes": "apps/finance/js/everyday.js (new), screens/spending.js, app.js (Work cost checkbox, everyday limit), css .dn-*, sw.js v45."
- },
- {
-  "id": "F-MONEY-BATCH1",
-  "priority": 2,
-  "area": "money",
-  "title": "Money batch 1: refunds, goal reservations warning, rate date, duplicate finder",
-  "user_visible_behavior": "A record can be a refund: it lowers its category's spending and is not income (balances unchanged), with a 'Looks like a refund?' list for old income records; the Goals warning names the short goal, the amount and why, with Lower to / Review; converted totals and Rates show 'rate from 12 Nov' and a quiet 'Update rates' chip when the rate is over 3 days old; Find duplicates in the Log groups look-alike records, keeps one, removes the rest after a backup, with one Undo",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-   "SMOKE_ONLY=\"Money refunds|Money goals warning|Money exchange rates|Money duplicates\" npm run smoke"
-  ],
-  "evidence": "2026-11-13: tsc, full vitest (moneyBatch1.test.ts, 20 tests), the four smoke steps (CHROMIUM_PATH chromium-1243).",
-  "notes": "apps/finance/js: catshare.js (isRefund, signed), model.js, refunds.js, dupes.js, ratedate.js (new), screens/moneytidy.js (new), screens/goals.js, app.js, sw.js v47; core/moneyHub.ts + web/moneyHub.ts; bot bundle rebuilt."
- },
- {
-  "id": "F-COINS-HIDDEN",
-  "priority": 2,
-  "area": "rewards",
-  "title": "Show coins and rewards: off by default",
-  "user_visible_behavior": "Coins are hidden in the desktop app until Settings → Simple mode → Show coins and rewards is on: no wallet chip, coin numbers, +N payouts, coin flight, Activity tab, Fun and Points cards, or coin text in toasts and the island. Coins are still earned and stored the same way.",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-   "npm run smoke"
-  ],
-  "evidence": "2026-11-13: tsc, vitest (simpleMode.test.ts, points.test.ts), smoke step Coins are hidden by default.",
-  "notes": "simple_mode.coins (core/simpleMode.ts); useShowCoins / coinsShownNow in useSimple.ts; Coins in ui.tsx renders nothing while hidden."
- },
+  {
+   "id": "F-USABLE-CORE",
+   "priority": 1,
+   "area": "today",
+   "title": "Usability pass: a 4-item menu with a closed Archive, and the 7 daily flows with fewer clicks",
+   "user_visible_behavior": "Simple mode's menu is Today, Study Time, Sport Track and Money, then Settings; every other page is in one closed Archive group (Settings → Simple mode brings any back; Ctrl+K finds all; Alt+number follows the menu). Today logs last night in place, names the must-do its Start button starts, shows a running block with Stop, and offers Set tomorrow's 3 at any hour. Starting focus no longer dims the app or asks a goal; stopping no longer asks twice. Study Time, Sport Track's Dashboard and Workout done have one main button each; no dead demo buttons; repeat meals have + Log; the island's Stop shows the time and water shows the day so far. Text 15 px.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/simpleMode.test.ts",
+    "SMOKE_ONLY=\"Today shows 3|island in Simple mode|Simple mode\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch usability-core; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); before/after walks of the 7 flows at 1920x1080 kept outside the repo.",
+   "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner)."
+  },
+  {
+   "id": "F-SEC-HUNT-NOV",
+   "priority": 1,
+   "area": "security",
+   "title": "Security hunt fixes: no PIN hash in settings, web push keeps to the budget, 503 on a database hiccup, tick needs a session or the secret",
+   "user_visible_behavior": "The PIN hash is no longer copied into the synced settings (a signed-in page could read and crack it); the server deletes any old copy. Each device keeps its own offline copy after an online unlock; a device that never unlocked online needs the internet once. Phone push only wakes for the day's budgeted messages (at most 4). Bot health and Settings → Plugins refresh say 'try again' instead of signing out when the database hiccups. /api/cron?job=tick needs the app's session or CRON_SECRET. /api/db refuses every server sys_* table, pragma_* functions, dbstat and sqlite_dbpage. The URL guard refuses IPv4 hidden in IPv6.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/securityHunt.test.ts src/renderer/src/web/server.test.ts",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch security-hardening-pin; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "api/_lib.mjs (authState cleanup, changePin), api/_sqlguard.mjs (PAGE_SYS_TABLES, SECRET_KEYS, INTERNAL), api/_push.mjs (PUSHABLE), api/bot-setup.mjs, api/cron.mjs, api/google.mjs (stateOk), src/core/netGuard.ts, web/webAuth.ts (localPinStore), tursoWebBridge.ts. Decision in DECISIONS.md."
+  },
+  {
+   "notes": "core/simpleMode.ts (SIMPLE_CORE, ARCHIVE_PAGES, simpleMenu, toggleShown, altTarget), Sidebar.tsx, App.tsx (Alt keys, rest chip), settings/simple.tsx, ThreeToday.tsx (SleepForm, running block, plan-tomorrow), FocusIsland.tsx (no dim in Simple mode, stuck-open fix), boost/FocusBoost.tsx, study/*, training/SportDashboard.tsx, WorkoutMode.tsx, WorkoutDone.tsx, body/FoodBoard.tsx, food-paste.css, DesktopIsland.tsx simplePanel; web/webServices.ts sleep.setBed. Money/finance untouched (owner). The Archive menu was replaced the same day by the module switch (F-MODULE-SWITCH)."
+  },
+  {
+   "id": "F-MODULE-SWITCH",
+   "priority": 1,
+   "area": "today",
+   "title": "Module switch: each part of the app ON or OFF; by default only Today, Money, Sleep, Sport Track and Discipline",
+   "user_visible_behavior": "Settings → Modules lists every part with one line and a switch. Off means off: gone from the menu, Ctrl+K, Alt+number, Today, the island and notifications; its background jobs stop on the PC and the server; its Telegram commands answer \"This part is switched off. Turn it on in Settings → Modules\". Turning one on brings it back at once with its data. The Dynamic island is a module too, off by default: no island window; your own timers then end with the in-app chime and a Windows notification. Today keeps the 3 numbers with Study Time and Tasks off. The Archive group is gone.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/modules.test.ts src/core/simpleMode.test.ts src/server/modules.server.test.ts",
+    "SMOKE_ONLY=\"Modules:|Simple mode\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch module-switch; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243); real 1920x1080 screenshots of the sidebar + Today and of Settings → Modules kept outside the repo.",
+   "notes": "core/modules.ts (registry, readModules, menuPages, altPage, jobOn, offReply, notifOn, islandWithout), settingsKeys modules_on, tursoWebBridge life.modules, useModules.ts, ModuleOff.tsx, settings/modules.tsx, Sidebar.tsx, App.tsx, Palette.tsx, pages/Today.tsx, ThreeToday.tsx, todayEvents.ts, NotifToasts.tsx, Notifications.tsx, capture.ts, coachUnread.ts, vault/driveSync.ts, automationsFeed.ts, IslandFeed.tsx, DesktopIsland.tsx; web/webBots.ts (offReply, Coach off); server/telegramBot.ts (runTick parts, runDaily, runPlugins, Todoist pay); desktop/island.ts (setModule, island:module), main.ts (tray, timer: notifications), preload.ts. Money's own code untouched."
+  },
+  {},
+  {
+   "id": "F-MONEY-SIX",
+   "priority": 1,
+   "area": "money",
+   "title": "Money fixes: foreign currency, import rates, one spending rule, decimals, one no-spend button, faster saves",
+   "user_visible_behavior": "A 10 EUR quick add or Telegram entry counts as its MDL value (through USD), not 10 MDL; Finance Home offers a one-time 'Re-price N past entries' review (before and after, confirm, Undo). An import preview warns 'No EUR→MDL rate for 12 rows: they would count 1:1' with Fetch rates, Set rate or Skip these rows, and Import waits. The Money hub's totals leave out points-only reward buys like Finance's donut. Single amounts show their bani (12,50 MDL) with Finance Helper's own formatter; totals are whole; the label is MDL everywhere. One 'Nothing spent today' button. Finance saves wait a moment and write once; Telegram entries still waiting after 50 days get a warning with Apply now on the Money page and are never dropped silently.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyFixes.test.ts src/renderer/src/web/honestMoney.test.ts src/core/moneyHub.test.ts",
+    "SMOKE_ONLY=\"Money amounts|Finance import|No spending|Money hub|Finance categories\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch money-six-fixes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "finance/js/fx.js rateToBase + rateOnDay, reprice.js + screens/reprice.js, importer.js rateGaps/fillRate/fillKnownRates/skipNoRate + screens/rategaps.js (CSV, workbook, bank imports), store.js saveSoon/flushSave/onSaved, sync.js mergeLocal; web/financeBot.ts, web/moneyHub.ts (countsAsSpending), web/appSync.ts (cheap noteEdit), web/financeInbox.ts (keepInbox, inboxWarning), web/moneyApi.ts (inboxWarning, applyInbox), core/moneyText.ts, core/moneyHub.ts leiText, pages/Money.tsx, MoneyQuick.tsx, DayFlow.tsx, EmbedHost.tsx, main/money.ts."
+  },
+  {
+   "id": "F-SYNC-LOSS",
+   "priority": 1,
+   "area": "data-sync",
+   "title": "Sync merges keep both devices' changes",
+   "user_visible_behavior": "When two devices changed the same thing, nothing is lost: an exercise added on one device stays (a deleted one stays deleted), a past day keeps the reps from both, a Waky morning keeps its time and its mood, and a weight or a position edited offline is no longer added up (the later change wins). A device whose clock is behind no longer loses edits made after it saw the other copy. A damaged offline queue in the browser is backed up and never written over.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/syncDataLoss.test.ts src/renderer/src/web/desktopSync.test.ts src/renderer/src/web/sportSync.test.ts src/renderer/src/web/appSync.test.ts src/renderer/src/web/mirror.test.ts",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch fix/sync-data-loss; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "web/desktopSync.ts (COUNTER_KEYS, merge3 serverLater, mergeRow), web/appSync.ts (SEEN timeline, EDITED cleared, mergeEntry/mergeEntries, mergeWaky), web/sportSync.ts (exercise union + exercises in lists, past days field by field), web/mirror.ts (outbox backup life_offline_writes_unreadable_<ms>, outboxLocked). Unit tests only: no UI change, so no smoke step."
+  },
+  {
+   "id": "F-SLEEP-DISC-FOOD-PICKS",
+   "priority": 1,
+   "area": "health",
+   "title": "Food reader fixes; one meaning of on time; bedtime check; 23:15 and 00:00 reminders; one Discipline day number",
+   "user_visible_behavior": "Pasted food: 1,500 g and KCAL 1,200 read as thousands, a 01:30 meal lands on the evening before, a note starting with Fat/Carbs stays a note. Sleep: on time is asleep by 23:30 and up by 06:45 with 5 min grace everywhere (points, streak, Today, score, pill); Today and Sleep name the targets. Going to bed then 30+ min more at the PC takes the bed points back and sets the bedtime to the last PC use, said in plain words on Sleep and in the bell. Windows notifications at 23:15 and 00:00 when Sleep is on and bed is not logged. Discipline: the ring, the campaign, Today and the alert all say the same Day N; undoing a reset removes its comeback check-ins and nothing is sent to Todoist or Ben while those modules are off; check-in hours use the configured time zone.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/foodPaste.test.ts src/core/sleep.test.ts src/core/threeNumbers.test.ts src/core/bedSense.test.ts src/core/notifyBudget.test.ts src/main/sleep.test.ts src/main/discipline.test.ts",
+    "SMOKE_ONLY=\"One day number on Discipline\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch sleep-discipline-food-picks; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "core/foodPaste.ts, core/sleep.ts, core/threeNumbers.ts, core/bedSense.ts, core/notifyBudget.ts, core/discipline.ts dayShown, core/comeback.ts, core/dates.ts hourIn, main/sleep.ts bedActivity, main/discipline.ts, main/wallet.ts hour, desktop/main.ts sleep tick, renderer sleepNight.ts, ThreeToday.tsx, pages/Sleep.tsx, pages/Discipline.tsx."
+  },
+  {
+   "id": "F-MONEY-TRUST-1",
+   "priority": 1,
+   "area": "money",
+   "title": "Money trust phase 1: monthly reconciliation, full export and import back, every total proved",
+   "user_visible_behavior": "Reconcile an account against the bank: type the real balance, see the difference with the app's balance that day and what could explain it (an entry of that amount, likely duplicates, recurring items not logged, entries since the last check), or add one labelled 'Reconciliation adjustment' that is not income or spending; Undo takes it out. 'Reconcile: due' on the Money page and Finance Accounts after 31 days. One click exports every record with every field (CSV with a BOM, plus an Excel file with accounts, invoices, clients, recurring items, goals and reconciliations); importing that CSV back shows a preview and adds only new records. Finance and the Money hub now give the same totals (points buys, recurring bills in USD, money logged ahead, foreign accounts without live rates).",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyTrust.test.ts src/renderer/src/web/moneyReconcile.test.ts",
+    "SMOKE_ONLY=\"Money\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch money-trust-phase1; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "apps/finance/js/reconcile.js, moneyexport.js, screens/reconcile.js, screens/moneyio.js, catshare.js (isCorrection, countsAsIncome), model.js (counts, reconciliations, rebuiltTotal knownRates), safespend.js (up to today, knownRates, countsAsSpending), forecast.js, importer.js (rateOnDay, previewTotal), sync.js (reconciliations, tie-break), history.js, app.js (goto, export button, import detection, Reconciliation pill), screens/accounts.js, sw.js v39; web/moneyHub.ts (reconcile, ruleInBase), pages/Money.tsx ReconcileDue."
+  },
+  {
+   "id": "F-MONEY-LONG-VIEW",
+   "priority": 2,
+   "area": "money",
+   "title": "Money phase 4: the long view (net worth over time, savings rate, this year vs last, runway)",
+   "user_visible_behavior": "Finance → Reports → Long view: 4 numbers at the top (net worth and its change this year, this year's savings rate with its trend, spending so far against the same days last year, runway). Net worth month by month or year by year (chart plus table, saved snapshots marked), and what each account adds in the month you tap. Savings rate per month and per year. Each category this year against last year (so far or full year) with the biggest increases and decreases. Runway: 'You could live N months on your savings' from the last 3, 6 and 12 months. MDL by default; USD or EUR convert at the rate of each day. A book filter shows when records have books. The Money page's Month tab has one card with net worth, this year's change, the savings rate and the runway, and 'See it all' opens the screen. Read only.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLongView.test.ts",
+    "SMOKE_ONLY=\"Money long view\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch money-phase4-longview; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "apps/finance/js/longview.js (pure), screens/longview.js, css/longview.css (loaded by the screen); app.js: import, SUB_TABS, NAV_PARENT, SCREENS, goto 'longview'; sw.js 3 lines; web/moneyLong.ts, MoneyLong.tsx, moneyLong.css; web/moneyApi.ts adds view.long (not in moneyHub.ts, so the bot bundle is unchanged); pages/Money.tsx one card."
+  },
+  {
+   "id": "F-PHONE-PAY-1",
+   "priority": 1,
+   "area": "money",
+   "title": "Phone payments backend: MacroDroid notifications to To sort (money_tosort), keys, Telegram paste",
+   "user_visible_behavior": "Settings → Phone payments: make or remove a key per phone, the exact MacroDroid steps (Notification received from maib, Google Wallet, Revolut, Paynet → HTTP POST to /api/cron?job=pay with Authorization: Bearer <key> and the body template), Send test, and the last 5 notifications received with what was read. Each payment is saved at once in To sort (money_tosort), in its own currency, and never goes into Finance Helper before a tap. maib + Google Wallet for one tap is kept once. Declined, codes and money in are skipped with a reason; an unreadable one is kept to sort by hand. Pasting a notification to the finance bot does the same. No points until sorted on the day.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/payNotify.test.ts src/core/moneyToSort.test.ts src/renderer/src/web/phonePay.test.ts src/renderer/src/web/healthKeys.test.ts",
+    "SMOKE_ONLY=\"Phone payments\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: branch phone-payments; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "core/payNotify.ts (+ fixtures), core/moneyToSort.ts, core/moneyDays.ts logMoment, web/phonePay.ts, web/webServices.ts financeDayTx, web/webBots.ts (paste), server/telegramBot.ts phonePay, api/_health.mjs (key kinds, payRequest, readPayBody), api/cron.mjs job=pay, settings/phonePay.tsx, bridge plugins.phonePay, settingsKeys money_tosort, e2e/server.mjs job=pay. The To sort card UI is the next batch."
+  },
+  {
+   "id": "F-DATA-SAFETY",
+   "priority": 1,
+   "area": "data",
+   "title": "No data loss: cloud backup in parts, local zip every day, backup before risk with undo, tested restore, Data safety page",
+   "user_visible_behavior": "Settings → Data safety: green/amber/red for the cloud backup, the backup on this PC, the weekly off-site copy and the last restore test, the size, Back up now, Test a restore (desktop), Export everything (one zip: CSV + JSON), Restore from file (.zip or .json), the backup folder (default Documents/LifeSystem/Backups, Change), Undo to before X, daily and cloud backups with Restore. Today shows a small red dot next to its title only when something is red, and a red state is one of the 4 daily notifications. A cloud backup of any size is saved (in parts); a restore saves a backup of today first, goes all or nothing in foreign-key order, puts the apps' data back and no device merges its old copy back in.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npx vitest run src/server/cloudParts.test.ts src/desktop/localBackups.test.ts src/renderer/src/web/backupBeforeRisk.test.ts src/renderer/src/web/restoreDrill.test.ts src/core/backupPlan.test.ts src/core/dataSafety.test.ts src/renderer/src/safety/backupFiles.test.ts",
+    "SMOKE_ONLY=\"Data safety\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch data-safety; tsc, full vitest (4336) and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "core/backupPack.ts, backupCheck.ts, backupPlan.ts (restorePlan, fkOrder, markRestoredApps, localBackupsToDelete), riskChange.ts, dataSafety.ts, zip.ts; api/_snapshots.mjs (parts), db.mjs {snapshotPart}, cron.mjs job=backup list/part and job=offsite; web/cloudBackup.ts, restoreApps.ts, restoreDrill.ts, appSync.ts (restore id, big-change guard); desktop/localBackups.ts, backups.ts; renderer safety/*; .github/workflows/backup.yml; docs/RECOVERY.md. No schema change (server tables made with CREATE TABLE IF NOT EXISTS)."
+  },
+  {
+   "id": "F-MONEY-TAXES-3",
+   "priority": 1,
+   "area": "money",
+   "title": "Money v2 phase 3: tax tags, the yearly tax summary, the accountant export and receipts in Google Drive",
+   "user_visible_behavior": "Finance Helper → Reports → Taxes: 'Not tax advice: check with an accountant.' on every view; the tax situation (individual entrepreneur by default, individual, IT Park, or not set = totals only) with dated, sourced numbers you can change; taxable income, deductible costs, non-taxable income and VAT for the year, by source, by category, by book and month by month, totals also in USD or EUR at today's rate; a rough estimate and the deadline. Tag records one by one, many at once (also from the Log table's bulk bar) or once per category. 'Excel for your accountant' saves one .xlsx (Entries with a Drive link per receipt, and Totals). A cost's edit sheet has 'Attach receipt' (photo or PDF): kept on this device at once, then uploaded to Google Drive 'Life System/Receipts/YYYY-MM'; while Drive is not connected it waits and goes later.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeTax.test.ts src/renderer/src/web/financeAccountant.test.ts src/core/receiptIndex.test.ts src/renderer/src/money/receipts.test.ts",
+    "SMOKE_ONLY=\"Money taxes\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch money-phase3-taxes; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "apps/finance/js/tax.js, taxprofiles.js, accountant.js, receipts.js, screens/taxes.js, css/tax.css; app.js (Taxes tab, bulk 'Tax tag…', sheet row, keepOnEdit); core/receiptIndex.ts; renderer/src/money/receipts.ts + receiptBridge.ts; EmbedHost.tsx (2 hooks); tursoWebBridge.ts moneyReceipts; settingsKeys money_receipts; modules.ts receiptUpload; vault/driveApi.ts hides receipt folders; e2e/smokeTaxes.mjs. Not tried against the real Google Drive yet (fakes only)."
+  },
+  {
+   "id": "F-MONEY-5A",
+   "priority": 1,
+   "area": "money",
+   "title": "Money phase 5a: learned category rules, To sort card, bills to confirm, Telegram uses the rules",
+   "user_visible_behavior": "Categories are learned from what you chose before (LINELLA 23 = Linella), with how sure the app is. Phone payments wait in a To sort card on the Money page with 3 category chips and Other… (an unreadable one asks for the amount); one tap files one and teaches a rule, and the next one from that merchant is filed by itself, marked auto, with OK, Change and Undo. Recurring bills that are due wait for one tap (Paid / Didn't happen). A Rules card lists, edits and deletes rules and shows what was learned. On Telegram the reply says which category it chose and how sure, with a change button, and three buttons when not sure. Auto-filed entries pay no points.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/financeLearn.test.ts src/renderer/src/web/moneySort.test.ts src/renderer/src/web/financeBot.test.ts",
+    "SMOKE_ONLY=\"Money to sort\" npm run smoke"
+   ],
+   "evidence": "2026-11-12: branch money-phase5; tsc, full vitest and the full smoke (CHROMIUM_PATH chromium-1243).",
+   "notes": "apps/finance/js/learn.js (new), model.js (suggestCategory sure merchant, addRule/removeRule via learn.js, keptOnEdit), app.js (edit keeps unknown fields), sync.js (rules list merge), sw.js v42; web/moneySortCore.ts, web/moneySort.ts, money/ToSortCard.tsx, money/RulesCard.tsx, money/sort.css (new); web/financeBot.ts (learnCategory, saveFinance), core/moneyDays.ts (countsAsLogged on logMoment), core/moneyToSort.ts (auto, reopen; keepToSort keeps reopen), core/moneyText.ts typedBani, tursoWebBridge.ts, bridge.ts, pages/Money.tsx."
+  },
+  {
+   "id": "F-MONEY-WHERE",
+   "priority": 2,
+   "area": "money",
+   "title": "Money: Where your money goes, old look back plus Everyday only",
+   "user_visible_behavior": "Centred donut with callout labels that never overlap, and full-width rows (icon, name, share bar, amount, round % badge) with stored category colours; change pills, budget text and records in the second line; rows open in place; hover links row and slice. Everything / Everyday only toggle (leaves out work-cost categories and one-offs, says how much)",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Finance categories\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeEveryday.test.ts), smoke steps Finance categories (2).",
+   "notes": "apps/finance/js/everyday.js (new), screens/spending.js, app.js (Work cost checkbox, everyday limit), css .dn-*, sw.js v45."
+  },
+  {
+   "id": "F-MONEY-BATCH1",
+   "priority": 2,
+   "area": "money",
+   "title": "Money batch 1: refunds, goal reservations warning, rate date, duplicate finder",
+   "user_visible_behavior": "A record can be a refund: it lowers its category's spending and is not income (balances unchanged), with a 'Looks like a refund?' list for old income records; the Goals warning names the short goal, the amount and why, with Lower to / Review; converted totals and Rates show 'rate from 12 Nov' and a quiet 'Update rates' chip when the rate is over 3 days old; Find duplicates in the Log groups look-alike records, keeps one, removes the rest after a backup, with one Undo",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money refunds|Money goals warning|Money exchange rates|Money duplicates\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, full vitest (moneyBatch1.test.ts, 20 tests), the four smoke steps (CHROMIUM_PATH chromium-1243).",
+   "notes": "apps/finance/js: catshare.js (isRefund, signed), model.js, refunds.js, dupes.js, ratedate.js (new), screens/moneytidy.js (new), screens/goals.js, app.js, sw.js v47; core/moneyHub.ts + web/moneyHub.ts; bot bundle rebuilt."
+  },
+  {
+   "id": "F-COINS-HIDDEN",
+   "priority": 2,
+   "area": "rewards",
+   "title": "Show coins and rewards: off by default",
+   "user_visible_behavior": "Coins are hidden in the desktop app until Settings → Simple mode → Show coins and rewards is on: no wallet chip, coin numbers, +N payouts, coin flight, Activity tab, Fun and Points cards, or coin text in toasts and the island. Coins are still earned and stored the same way.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (simpleMode.test.ts, points.test.ts), smoke step Coins are hidden by default.",
+   "notes": "simple_mode.coins (core/simpleMode.ts); useShowCoins / coinsShownNow in useSimple.ts; Coins in ui.tsx renders nothing while hidden."
+  },
   {
    "id": "F907",
    "priority": 2,
@@ -1405,20 +1404,20 @@
    "evidence": "2026-11-13: tsc, vitest (moneyBatch3.test.ts 13 tests, financeTax.test.ts), three smoke steps (e2e/smokeMoneyB3.mjs).",
    "notes": "apps/finance/js: bulk.js, cashcount.js, shortcuts.js, screens/cashcount.js (new), app.js, taxprofiles.js, sw.js v48. New settings keys cashCountOn/Day/Last (plain scalars, sync test)."
   },
- {
-  "id": "F-MONEY-B2",
-  "priority": 2,
-  "area": "rewards",
-  "title": "Money batch 2: budgets from 3 months, month review, net worth line, subscriptions per year",
-  "user_visible_behavior": "Plan -> Monthly Budgets has Suggest budgets from the last 3 months (editable, ticked ones saved, one Undo). From the 1st to the 7th Money Home shows a review card of last month (dismiss per device). Home has a net worth line for the last 12 month ends. Plan -> Subscriptions per year lists subscriptions and recurring payments with their cost per year, Keep and Remind me to cancel (notes only; nothing is cancelled).",
-  "status": "passing",
-  "verification": [
-   "npx tsc --noEmit -p tsconfig.json && npx vitest run",
-   "SMOKE_ONLY=\"Money\" npm run smoke"
-  ],
-  "evidence": "2026-11-13: tsc, vitest (financeMoneyB2.test.ts, 14 tests), smoke steps Money month review and net worth line, Money budgets from the last 3 months, Money subscriptions per year.",
-  "notes": "apps/finance: js/budgetsuggest.js, monthreview.js, subslist.js, screens/moneyb2.js (new), small hooks in app.js and screens/plan.js, sw.js v48. New settings keys subsKept and subsRemind (synced as scalars); review dismissal is localStorage only."
- },
+  {
+   "id": "F-MONEY-B2",
+   "priority": 2,
+   "area": "rewards",
+   "title": "Money batch 2: budgets from 3 months, month review, net worth line, subscriptions per year",
+   "user_visible_behavior": "Plan -> Monthly Budgets has Suggest budgets from the last 3 months (editable, ticked ones saved, one Undo). From the 1st to the 7th Money Home shows a review card of last month (dismiss per device). Home has a net worth line for the last 12 month ends. Plan -> Subscriptions per year lists subscriptions and recurring payments with their cost per year, Keep and Remind me to cancel (notes only; nothing is cancelled).",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run",
+    "SMOKE_ONLY=\"Money\" npm run smoke"
+   ],
+   "evidence": "2026-11-13: tsc, vitest (financeMoneyB2.test.ts, 14 tests), smoke steps Money month review and net worth line, Money budgets from the last 3 months, Money subscriptions per year.",
+   "notes": "apps/finance: js/budgetsuggest.js, monthreview.js, subslist.js, screens/moneyb2.js (new), small hooks in app.js and screens/plan.js, sw.js v48. New settings keys subsKept and subsRemind (synced as scalars); review dismissal is localStorage only."
+  },
   {
    "id": "money-ideas-b",
    "title": "Money: quick add (Q), salary watch, price memory, Ask about your money",
@@ -1615,6 +1614,20 @@
    ],
    "evidence": "2026-11-18: tsc and unit tests pass; smoke could not build in the sandbox (missing onnxruntime-web), left to CI.",
    "notes": "Keep ISLAND_AVAILABLE in e2e/smoke.mjs in step."
+  },
+  {
+   "id": "F-MONEY-LONG",
+   "priority": 2,
+   "area": "money",
+   "title": "Money for long-term use: repeating records, monthly check-up, more budget kinds, Year summary",
+   "user_visible_behavior": "Repeating rules (every N days/weeks/months/years, day of month, end date) ask in a To confirm list on Home or add themselves with Undo, never twice across devices; Plan → Repeating lists them; Repeat this… on any record. A monthly check-up (reminder + sheet) compares each account with the bank and adds one visible adjustment that does not count as income or spending. Weekly, yearly, tag and trip budgets with bars and 80%/100% warnings. Year summary on Reports → Year in review.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/renderer/src/web/moneyLongTerm.test.ts",
+    "SMOKE_ONLY=\"Money long-term\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: new unit tests (24) and the smoke step pass; sw cache v67.",
+   "notes": "Settings keys: checkupOn/Day/Last/Snooze, budgets. Rule fields: n, unit, dom."
   }
  ]
 }

@@ -6,7 +6,7 @@
 //   settings.subsRemind = "Remind me to cancel" (the day added; a note in the list)
 
 import { findSubscriptions } from './subs.js';
-import { perMonth, nextDate, FREQS } from './recurring.js';
+import { perMonth, nextDate, FREQS, describe } from './recurring.js';
 import { convert } from './fx.js';
 import { addDays } from './dates.js';
 
@@ -26,7 +26,7 @@ export function subscriptionRows(state, today) {
     const own = perMonth(r) * 12;
     const yearly = r.currency === cur ? own : convert(own, r.currency, cur, state.rates) ?? own;
     const next = nextDate(r, r.lastDone || addDays(r.start, -1));
-    rows.push({ key: `rec:${r.id}`, name: r.note || 'Recurring payment', every: EVERY[r.every] || r.every, amount: r.amount, currency: r.currency, yearly, next, source: 'recurring' });
+    rows.push({ key: `rec:${r.id}`, name: r.note || 'Recurring payment', every: r.every === 'custom' ? describe(r).toLowerCase() : EVERY[r.every] || r.every, amount: r.amount, currency: r.currency, yearly, next, source: 'recurring' });
   }
   for (const x of rows) { x.kept = kept[x.key] || null; x.remind = remind[x.key] || null; }
   rows.sort((a, b) => b.yearly - a.yearly);

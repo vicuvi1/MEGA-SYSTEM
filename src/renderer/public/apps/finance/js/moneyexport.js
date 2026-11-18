@@ -18,6 +18,7 @@ import { txKey } from './importer.js';
 import { tagsOf, uid } from './model.js';
 import { parseAmount } from './money.js';
 import { isValidISO } from './dates.js';
+import { describe } from './recurring.js';
 
 export const TX_HEADER = ['ID', 'Date', 'Type', 'Account', 'From', 'To', 'To amount', 'Category', 'Subcategory', 'Amount', 'Currency', 'Base amount', 'Base currency', 'Rate',
   'Note', 'Tags', 'Person', 'Client', 'Invoice ID', 'Loan', 'Repriced from', 'Recurring ID', 'Reconciliation ID', 'Created', 'Updated',
@@ -96,7 +97,7 @@ export function clientRows(state) {
 export function recurringRows(state) {
   const n = names(state);
   const rows = [['ID', 'Type', 'Note', 'Amount', 'Currency', 'Every', 'Start', 'End', 'Account', 'Category', 'Person', 'Paused', 'Auto', 'Last done', 'Updated']];
-  for (const r of state.recurring || []) rows.push([r.id, r.type, r.note || '', plain(r.amount), r.currency || state.settings.currency, r.every, r.start, r.end || '', n.acc(r.account), n.cat(r.category), n.person(r.person)?.name || '', r.paused ? 'yes' : '', r.auto ? 'yes' : '', r.lastDone || '', iso(r.updatedAt)]);
+  for (const r of state.recurring || []) rows.push([r.id, r.type, r.note || '', plain(r.amount), r.currency || state.settings.currency, r.every === 'custom' ? describe(r) : r.every, r.start, r.end || '', n.acc(r.account), n.cat(r.category), n.person(r.person)?.name || '', r.paused ? 'yes' : '', r.auto ? 'yes' : '', r.lastDone || '', iso(r.updatedAt)]);
   return rows;
 }
 export function goalRows(state) {

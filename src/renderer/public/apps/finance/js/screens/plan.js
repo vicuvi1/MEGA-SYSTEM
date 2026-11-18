@@ -12,11 +12,13 @@ import { forecast } from '../forecast.js';
 import { lineChart } from '../charts.js';
 import { findSubscriptions, recurringFrom } from '../subs.js';
 import * as MoneyB2 from './moneyb2.js';
+import * as Repeating from './repeating.js';
+import * as Budgets from './budgetkinds.js';
 
 const initial = (name) => esc((String(name).match(/\p{L}|\p{N}/u) || ['•'])[0].toUpperCase());
 const catOf = (id) => M.category(ctx.state, id) || { name: 'Other', emoji: '•' };
 const titleOf = (r) => r.note || catOf(r.category).name;
-const freq = (r) => R.FREQS.find((f) => f.id === r.every) || R.FREQS[2];
+const freq = (r) => (r.every === 'custom' ? { label: R.describe(r), short: R.describe(r).toLowerCase() } : R.FREQS.find((f) => f.id === r.every) || R.FREQS[3]);
 const base = () => ctx.state.settings.currency;
 const inBase = (r, cents = r.amount) => (r.currency === base() ? cents : (convert(cents, r.currency, base(), ctx.state.rates) ?? cents));
 const sum = (items) => items.reduce((a, x) => a + (inBase(x.rule) || 0), 0);
@@ -25,7 +27,7 @@ const when = (date, today) => {
   return d === 0 ? 'today' : d === 1 ? 'tomorrow' : d < 0 ? `${-d} day${d === -1 ? '' : 's'} ago` : `in ${d} days`;
 };
 const ruleMoney = (r) => (r.type === 'income' ? formatMoney(r.amount, r.currency, { sign: true }) : formatMoney(-r.amount, r.currency));
-const txId = (rule, date) => `rec-${rule.id}-${date}`;
+const txId = R.recId;
 const shortDay = (iso) => dayLabel(iso).replace(/^\w+, /, '');
 
 export const PRESET_SUBS = [
@@ -631,12 +633,11 @@ export function homeCard() {
   const { state } = ctx;
   if (!(state.recurring || []).length) return '';
   const today = todayISO();
-  const due = R.dueItems(state, today);
-  const up = R.upcomingItems(state, today, 14).slice(0, Math.max(0, 4 - due.length));
-  if (!due.length && !up.length) return '';
-  return `<section class="card"><h2>Coming up <button class="card-link right" data-go="plan">Plan</button></h2>
-    <div class="list">${due.slice(0, 4).map((x) => itemRow(x, today, { due: true })).join('')}${up.map((x) => itemRow(x, today)).join('')}</div>
-    ${due.length > 4 ? `<p class="muted small" style="margin-bottom:0">${due.length - 4} more due on the Plan screen.</p>` : ''}</section>`;
+  const up = R.upcomingItems(state, today, 14).slice(0, 4);
+  const confirm = Repeating.toConfirmCard();
+  if (!up.length) return confirm;
+  return `${confirm}<section class="card"><h2>Coming up <button class="card-link right" data-go="plan">Plan</button></h2>
+    <div class="list">${up.map((x) => itemRow(x, today)).join('')}</div></section>`;
 }
 
 // ---------- Subscription finder ----------
@@ -685,7 +686,10 @@ export function view() {
       tabContent = forecastCard();
       break;
     case 'budgets':
-      tabContent = budgetCard();
+      tabContent = budgetCard() + Budgets.cards();
+      break;
+    case 'repeating':
+      tabContent = Repeating.tab();
       break;
     case 'yearly':
       tabContent = MoneyB2.subsTab();
@@ -710,9 +714,10 @@ export function view() {
 
     <div class="chips plan-tabs">
       <button class="chip" data-act="plan-tab" data-tab="subs" aria-pressed="${tab === 'subs'}">✨ Subscriptions &amp; Bills <span class="tab-badge">${expenseRules.length}</span></button>
+      <button class="chip" data-act="plan-tab" data-tab="repeating" aria-pressed="${tab === 'repeating'}" data-testid="plan-tab-repeating">🔁 Repeating ${due.length ? `<span class="tab-badge bad">${due.length}</span>` : ''}</button>
       <button class="chip" data-act="plan-tab" data-tab="calendar" aria-pressed="${tab === 'calendar'}">📅 Payment Timeline ${due.length ? `<span class="tab-badge bad">${due.length} due</span>` : ''}</button>
       <button class="chip" data-act="plan-tab" data-tab="forecast" aria-pressed="${tab === 'forecast'}">📈 Cash-Flow Forecast</button>
-      <button class="chip" data-act="plan-tab" data-tab="budgets" aria-pressed="${tab === 'budgets'}">🎯 Monthly Budgets</button>
+      <button class="chip" data-act="plan-tab" data-tab="budgets" aria-pressed="${tab === 'budgets'}">🎯 Budgets</button>
       <button class="chip" data-act="plan-tab" data-tab="yearly" aria-pressed="${tab === 'yearly'}">💳 Subscriptions per year</button>
     </div>
 
@@ -759,21 +764,25 @@ function skip(rule, date) {
 }
 
 // Rules set to "log by itself": add every due date
+const id0 = (rule, id) => id.startsWith(`rec-${rule.id}-`);
+
 export function runAuto() {
   const { state } = ctx;
   if (ctx.DEMO || state._sealed) return 0;
   let n = 0;
+  const added = [];
   for (const { rule, date } of R.dueItems(state, todayISO())) {
     if (!rule.auto) continue;
     const rate = rule.currency === base() ? 1 : ctx.suggestedRate(rule.currency);
     if (!rate) continue;
     const id = txId(rule, date);
-    if (!state.tx.some((t) => t.id === id) && !state.deleted[id]) { state.tx.push(R.makeTx(rule, date, { id, rate })); n++; }
+    if (!state.tx.some((t) => t.id === id) && !state.deleted[id]) { state.tx.push(R.makeTx(rule, date, { id, rate })); added.push(id); n++; }
     R.markDone(rule, date);
   }
   if (n) {
     ctx.commit();
-    ctx.toast(`Added ${n} recurring record${n === 1 ? '' : 's'}`);
+    const one = added.length === 1 ? state.recurring.find((r) => id0(r, added[0])) : null;
+    ctx.toast(one ? `Added ${titleOf(one)} ${ruleMoney(one)}` : `Added ${n} repeating record${n === 1 ? '' : 's'}`, 'Undo', () => { Repeating.undoAdded(added); ctx.toast('Taken back'); });
   }
   return n;
 }
@@ -821,8 +830,9 @@ export function editRule(existing = null, preset = {}) {
         <label class="field"><span>How often</span><select id="rec-every">${R.FREQS.map((f) => `<option value="${f.id}" ${f.id === r.every ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label>
         <label class="field"><span>${r.every === 'once' ? 'On' : existing ? 'Counting from' : 'Next (or first) date'}</span><input id="rec-start" type="date" value="${esc(r.start)}"></label>
       </div>
+      ${Repeating.customFields(r)}
       ${r.every === 'once' ? '' : `<label class="field"><span>Ends (optional)</span><input id="rec-end" type="date" value="${esc(r.end || '')}"></label>`}
-      <label class="field check"><input type="checkbox" id="rec-auto" ${r.auto ? 'checked' : ''}><span>Log it by itself on the day (for fixed amounts)</span></label>
+      <label class="field check"><input type="checkbox" id="rec-auto" ${r.auto ? 'checked' : ''}><span>Add it by itself on the day (for fixed amounts). Off: it waits in &quot;To confirm&quot; and asks you.</span></label>
       ${existing ? `<label class="field check"><input type="checkbox" id="rec-paused" ${r.paused ? 'checked' : ''}><span>Paused</span></label>` : ''}
       <p class="lock-msg" id="rec-msg" role="alert"></p>
       <div class="btns">${existing ? '<button type="button" class="btn danger" data-act="rec-delete">Delete</button>' : ''}<button type="submit" class="btn primary">${existing ? 'Save' : 'Add'}</button></div>
@@ -836,6 +846,7 @@ export function editRule(existing = null, preset = {}) {
     r.category = v('#rec-cat').value;
     r.account = v('#rec-acc').value;
     r.every = v('#rec-every').value;
+    Repeating.readCustom(sheet, r);
     r.start = v('#rec-start').value || r.start;
     r.end = v('#rec-end')?.value || null;
     r.auto = v('#rec-auto').checked;
@@ -846,7 +857,7 @@ export function editRule(existing = null, preset = {}) {
     const paint = () => { sheet.innerHTML = html(); };
     paint();
     if (!existing) sheet.querySelector('#rec-amount').focus();
-    sheet.addEventListener('change', (e) => { if (e.target.id === 'rec-acc' || e.target.id === 'rec-every') { read(sheet); paint(); } });
+    sheet.addEventListener('change', (e) => { if (e.target.id === 'rec-acc' || e.target.id === 'rec-every' || e.target.id === 'rec-unit') { read(sheet); paint(); } });
     sheet.addEventListener('click', (e) => {
       const seg = e.target.closest('.seg button');
       if (seg && seg.dataset.type !== r.type) { read(sheet); r.type = seg.dataset.type; paint(); return; }
@@ -888,6 +899,7 @@ export function editRule(existing = null, preset = {}) {
 const findRule = (id) => (ctx.state.recurring || []).find((r) => r.id === id);
 
 export function onClick(act, el) {
+  if (Budgets.onClick(act, el)) return true;
   if (act === 'sub-make-rec' || act === 'sub-cancel' || act === 'sub-uncancel' || act === 'sub-hide') {
     const st = ctx.state;
     const sub = findSubscriptions(st, todayISO()).find((s) => s.key === el.dataset.key);
@@ -1027,6 +1039,8 @@ export function onClick(act, el) {
   }
   if (act === 'budget-set') { budgetSheet(); return true; }
   if (act === 'fc-days') { ctx.ui.fcDays = Number(el.dataset.n); ctx.render(); return true; }
+  if (act === 'plan-open-repeating') { ctx.ui.planTab = 'repeating'; location.hash = '#plan'; ctx.render?.(); return true; }
+  if (act === 'plan-open-repeating') { ctx.ui.planTab = 'repeating'; if (location.hash === '#plan') ctx.render(); else location.hash = '#plan'; return true; }
   if (act === 'rec-new') { editRule(); return true; }
   if (act === 'rec-once') { editRule(null, { every: 'once', auto: true }); return true; }
   if (act === 'rec-edit') { const r = findRule(el.dataset.id); if (r) editRule(r); return true; }

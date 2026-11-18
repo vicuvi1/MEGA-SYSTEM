@@ -8418,7 +8418,7 @@ var DAYS$8 = [
 	"Fri",
 	"Sat"
 ];
-var MONTHS$10 = [
+var MONTHS$9 = [
 	"Jan",
 	"Feb",
 	"Mar",
@@ -8435,7 +8435,7 @@ var MONTHS$10 = [
 /** "Tue 10 Nov, 13:05" (local time). */
 var whenText$1 = (at) => {
 	const d = new Date(at);
-	return `${DAYS$8[d.getDay()]} ${d.getDate()} ${MONTHS$10[d.getMonth()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+	return `${DAYS$8[d.getDay()]} ${d.getDate()} ${MONTHS$9[d.getMonth()]}, ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 var MEAL_WORD = {
 	breakfast: "Breakfast",
@@ -11299,7 +11299,7 @@ var plus = (day, n) => {
 	d.setDate(d.getDate() + n);
 	return ymd$3(d);
 };
-var MONTHS$9 = [
+var MONTHS$8 = [
 	"january",
 	"february",
 	"march",
@@ -11313,7 +11313,7 @@ var MONTHS$9 = [
 	"november",
 	"december"
 ];
-var MONTH_RE = new RegExp(`\\b(${MONTHS$9.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
+var MONTH_RE = new RegExp(`\\b(${MONTHS$8.map((m) => m.slice(0, 3)).join("|")})[a-z]*\\b`);
 /** "today", "yesterday", "this/last week", "this/last month", "in October", "last 7 days" → a date range. */
 function rangeOf$1(text, today) {
 	const t = text.toLowerCase();
@@ -11361,7 +11361,7 @@ function rangeOf$1(text, today) {
 	};
 	const m = MONTH_RE.exec(t);
 	if (m && /\b(in|during|for|from|of|on)\s+\w+/.test(t)) {
-		const idx = MONTHS$9.findIndex((x) => x.startsWith(m[1]));
+		const idx = MONTHS$8.findIndex((x) => x.startsWith(m[1]));
 		let year = Number(today.slice(0, 4));
 		if (idx > Number(today.slice(5, 7)) - 1) year -= 1;
 		const from = `${year}-${pad$16(idx + 1)}-01`;
@@ -11369,7 +11369,7 @@ function rangeOf$1(text, today) {
 		return {
 			from,
 			to: ymd$3(end) > today ? today : ymd$3(end),
-			label: MONTHS$9[idx][0].toUpperCase() + MONTHS$9[idx].slice(1)
+			label: MONTHS$8[idx][0].toUpperCase() + MONTHS$8[idx].slice(1)
 		};
 	}
 	return null;
@@ -23063,7 +23063,7 @@ function formatUrgeResponse() {
 	].join("\n");
 }
 // src/core/factTypes.ts
-var MONTHS$8 = {
+var MONTHS$7 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -23093,9 +23093,9 @@ function dateIn(text, today) {
 		return cand < addDays$7(today, -60) ? `${y + 1}${cand.slice(4)}` : cand;
 	};
 	const dm = /\b(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b/i.exec(text) ?? null;
-	if (dm) return pick(MONTHS$8[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
+	if (dm) return pick(MONTHS$7[dm[2].toLowerCase().slice(0, 3)], Number(dm[1]));
 	const md = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})\b/i.exec(text);
-	if (md) return pick(MONTHS$8[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
+	if (md) return pick(MONTHS$7[md[1].toLowerCase().slice(0, 3)], Number(md[2]));
 	const num = /\b(\d{1,2})[./](\d{1,2})\b/.exec(text);
 	if (num) return pick(Number(num[2]), Number(num[1]));
 	return null;
@@ -27061,7 +27061,7 @@ var DAYS$7 = [
 	"Friday",
 	"Saturday"
 ];
-var MONTHS$7 = [
+var MONTHS$6 = [
 	"Jan",
 	"Feb",
 	"Mar",
@@ -27078,7 +27078,7 @@ var MONTHS$7 = [
 /** "Friday 20 Nov". */
 function dayLabel(day) {
 	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
-	return `${DAYS$7[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS$7[d.getUTCMonth()]}`;
+	return `${DAYS$7[d.getUTCDay()]} ${d.getUTCDate()} ${MONTHS$6[d.getUTCMonth()]}`;
 }
 /** What kind of deadline, in one word, from its title ("exam", "essay", "report"), else "deadline". */
 function deadlineWord(title) {
@@ -31123,7 +31123,7 @@ function readMessage(m) {
 		snippet: String(m?.snippet ?? "").replace(/&#39;/g, "'").replace(/&quot;/g, "\"").replace(/&amp;/g, "&").slice(0, 240)
 	};
 }
-var MONTHS$6 = {
+var MONTHS$5 = {
 	jan: 1,
 	feb: 2,
 	mar: 3,
@@ -31156,7 +31156,7 @@ function findDate(text, today) {
 	};
 	if (dmy) return fix(Number(dmy[1]), Number(dmy[2]), dmy[3] ? dmy[3].length === 2 ? 2e3 + Number(dmy[3]) : Number(dmy[3]) : void 0);
 	const word = /\b(\d{1,2})\s+([a-z]{3})[a-z]*\b/i.exec(text);
-	if (word && MONTHS$6[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$6[word[2].toLowerCase()]);
+	if (word && MONTHS$5[word[2].toLowerCase()]) return fix(Number(word[1]), MONTHS$5[word[2].toLowerCase()]);
 	return null;
 }
 var KIND = [
@@ -34139,7 +34139,7 @@ var MILESTONE_RULE = "goal.milestone";
 var checkinRef = (goalId, period) => `goalci:${goalId}:${period}`;
 var milestoneRef = (goalId, index) => `goalms:${goalId}:${index}`;
 // src/core/goalsText.ts
-var MONTHS$5 = [
+var MONTHS$4 = [
 	"jan",
 	"feb",
 	"mar",
@@ -34153,7 +34153,7 @@ var MONTHS$5 = [
 	"nov",
 	"dec"
 ];
-var monthOf = (w) => MONTHS$5.indexOf(w.slice(0, 3).toLowerCase());
+var monthOf = (w) => MONTHS$4.indexOf(w.slice(0, 3).toLowerCase());
 var pad$10 = (n) => String(n).padStart(2, "0");
 var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
@@ -38430,7 +38430,7 @@ var DAYS$3 = [
 	"friday",
 	"saturday"
 ];
-var MONTHS$4 = [
+var MONTHS$3 = [
 	"january",
 	"february",
 	"march",
@@ -38465,7 +38465,7 @@ function dayWords(day, today) {
 	if (day === addDays$8(today, 1)) return "tomorrow";
 	const n = Math.round(((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getTime() - (/* @__PURE__ */ new Date(`${today}T12:00:00`)).getTime()) / 864e5);
 	if (n > 1 && n < 7) return cap$2(DAYS$3[wdayOf(day)]);
-	return `${Number(day.slice(8))} ${cap$2(MONTHS$4[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
+	return `${Number(day.slice(8))} ${cap$2(MONTHS$3[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
 }
 var fail$1 = (ask) => ({ ask });
 var isFail = (x) => !!x && typeof x.ask === "string";
@@ -38613,11 +38613,11 @@ function parseQuick$1(input, ctx) {
 		day: addDays$8(today, Number(inN[1]) * (/^w/i.test(inN[2]) ? 7 : 1)),
 		raw: inN[0].trim()
 	});
-	const monthRe = MONTHS$4.map((m) => m.slice(0, 3)).join("|");
+	const monthRe = MONTHS$3.map((m) => m.slice(0, 3)).join("|");
 	const dm = take(new RegExp(`\\b(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthRe})[a-z]*\\b`, "i")) ?? take(new RegExp(`\\b(?:on\\s+)?(${monthRe})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, "i"));
 	if (dm) {
 		const [a, b] = [dm[1], dm[2]];
-		const mon = MONTHS$4.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
+		const mon = MONTHS$3.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
 		const d = Number(/\d/.test(a) ? a : b);
 		if (mon < 0 || d < 1 || d > 31) return {
 			ok: false,
@@ -38628,7 +38628,7 @@ function parseQuick$1(input, ctx) {
 		if (day < today) day = `${++y}-${pad$9(mon + 1)}-${pad$9(d)}`;
 		if ((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getDate() !== d) return {
 			ok: false,
-			ask: `There is no ${d} ${cap$2(MONTHS$4[mon])}. Which day?`
+			ask: `There is no ${d} ${cap$2(MONTHS$3[mon])}. Which day?`
 		};
 		days.push({
 			day,
@@ -38766,7 +38766,7 @@ function parseQuick$1(input, ctx) {
 * its time; a time on the task itself would read as a deadline to the plan audit).
 */
 function todoistText(t, today, o = {}) {
-	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$4[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
+	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$3[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
 	return [
 		t.title,
 		due + (t.time && !o.noTime ? ` at ${t.time}` : ""),
@@ -56245,7 +56245,7 @@ function group(n) {
 	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
 }
 // src/renderer/public/apps/finance/js/dates.js
-var MONTHS$3 = [
+var MONTHS$2 = [
 	"January",
 	"February",
 	"March",
@@ -56266,7 +56266,7 @@ function toISO(d) {
 var monthKey = (iso) => iso.slice(0, 7);
 function monthLabel(key, short = false) {
 	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$3[m - 1];
+	const name = MONTHS$2[m - 1];
 	return `${short ? name.slice(0, 3) : name} ${y}`;
 }
 function addMonths(key, n) {
@@ -56919,19 +56919,71 @@ function coinValue(qty, asset, to, rates) {
 	return convert(Math.round(qty * usd * 100), "USD", to, rates);
 }
 // src/renderer/public/apps/finance/js/recurring.js
-var MONTHS$2 = {
-	month: 1,
-	"3months": 3,
-	year: 12
+var UNITS = [
+	{
+		id: "day",
+		one: "day",
+		many: "days"
+	},
+	{
+		id: "week",
+		one: "week",
+		many: "weeks"
+	},
+	{
+		id: "month",
+		one: "month",
+		many: "months"
+	},
+	{
+		id: "year",
+		one: "year",
+		many: "years"
+	}
+];
+var LEGACY = {
+	week: ["week", 1],
+	"2weeks": ["week", 2],
+	month: ["month", 1],
+	"3months": ["month", 3],
+	year: ["year", 1]
 };
 var pad$7 = (n) => String(n).padStart(2, "0");
-function nth(rule, n) {
-	if (rule.every === "once") return rule.start;
-	if (rule.every === "week") return addDays$1(rule.start, 7 * n);
-	if (rule.every === "2weeks") return addDays$1(rule.start, 14 * n);
-	const key = addMonths(monthKey(rule.start), (MONTHS$2[rule.every] || 1) * n);
-	return `${key}-${pad$7(Math.min(Number(rule.start.slice(8, 10)), daysInMonth$1(key)))}`;
+var clampN = (n) => Math.max(1, Math.min(999, Math.round(Number(n)) || 1));
+function spec(rule) {
+	if (rule.every === "once") return null;
+	if (rule.every === "custom") {
+		const unit = UNITS.some((u) => u.id === rule.unit) ? rule.unit : "month";
+		const dom = (unit === "month" || unit === "year") && Number.isInteger(rule.dom) && rule.dom >= 1 && rule.dom <= 31 ? rule.dom : null;
+		return {
+			unit,
+			n: clampN(rule.n),
+			dom
+		};
+	}
+	const [unit, n] = LEGACY[rule.every] || ["month", 1];
+	return {
+		unit,
+		n,
+		dom: null
+	};
 }
+function anchor(rule, s) {
+	if (!s.dom || s.unit !== "month" && s.unit !== "year") return rule.start;
+	const key = monthKey(rule.start);
+	const d = `${key}-${pad$7(Math.min(s.dom, daysInMonth$1(key)))}`;
+	return d >= rule.start ? d : `${addMonths(key, 1)}-${pad$7(Math.min(s.dom, daysInMonth$1(addMonths(key, 1))))}`;
+}
+function nth(rule, n) {
+	const s = spec(rule);
+	if (!s) return rule.start;
+	const first = anchor(rule, s);
+	if (s.unit === "day") return addDays$1(first, s.n * n);
+	if (s.unit === "week") return addDays$1(first, 7 * s.n * n);
+	const key = addMonths(monthKey(first), (s.unit === "year" ? 12 : 1) * s.n * n);
+	return `${key}-${pad$7(Math.min(s.dom || Number(first.slice(8, 10)), daysInMonth$1(key)))}`;
+}
+var recId = (rule, date) => `rec-${rule.id}-${date}`;
 function occurrences(rule, from, to, max = 1e3) {
 	const out = [];
 	for (let n = 0; n < 5e3 && out.length < max; n++) {
@@ -56946,12 +56998,16 @@ var active = (state) => (state.recurring || []).filter((r) => !r.paused);
 var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").localeCompare(b.rule.note || "");
 function dueItems(state, today) {
 	const out = [];
+	const have = new Set((state.tx || []).map((t) => t.id));
 	for (const rule of active(state)) {
 		const from = rule.lastDone ? addDays$1(rule.lastDone, 1) : rule.start;
-		for (const date of occurrences(rule, from, today, 60)) out.push({
-			rule,
-			date
-		});
+		for (const date of occurrences(rule, from, today, 60)) {
+			if (have.has(recId(rule, date))) continue;
+			out.push({
+				rule,
+				date
+			});
+		}
 	}
 	return out.sort(sortItems);
 }
@@ -72835,13 +72891,14 @@ var SLOT_TIME = {
 	lastcall: "00:00",
 	backup: "",
 	salary: "",
-	budgetwarn: ""
+	budgetwarn: "",
+	checkup: ""
 };
 var DEFAULT_BUDGET = {
 	on: true,
 	afternoon: false
 };
-var isSlot = (x) => typeof x === "string" && (x === "lastcall" || x === "backup" || x === "salary" || x === "budgetwarn" || SLOTS.includes(x));
+var isSlot = (x) => typeof x === "string" && (x === "lastcall" || x === "backup" || x === "salary" || x === "budgetwarn" || x === "checkup" || SLOTS.includes(x));
 /** The bell id of a slot's message: one per slot and day, so every device adds it once. */
 var slotNotifId = (slot, day) => `budget:${slot}:${day}`;
 function cleanLedger(raw, day) {
@@ -72919,6 +72976,7 @@ function slotText(slot, f) {
 		case "backup": return "Life System: a backup needs a look. Open Settings → Data safety.";
 		case "salary": return "Life System: your salary is not in yet. Open Money.";
 		case "budgetwarn": return "Life System: a Money budget is nearly used up. Open Money.";
+		case "checkup": return "Life System: time for your monthly Money check-up. Open Money.";
 	}
 }
 /** Reads the `simple_mode` setting's budget part (missing = on, afternoon off). */

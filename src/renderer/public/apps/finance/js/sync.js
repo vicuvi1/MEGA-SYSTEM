@@ -101,6 +101,13 @@ export function mergeStates(local, remote) {
   // Income sources (js/incomesources.js): a list by id, the newer copy of each wins; archived ones stay, an undone add stays deleted.
   if (Array.isArray(local.settings.incomeSources) || Array.isArray(r.settings.incomeSources)) settings.incomeSources = mergeList(local.settings.incomeSources, r.settings.incomeSources, deleted);
   settings.subcats = mergeList(local.settings.subcats, r.settings.subcats, deleted);
+  // Week, year and trip budgets (js/budgets.js): a list by id; the last check-up of each account: the later day.
+  if (Array.isArray(local.settings.budgets) || Array.isArray(r.settings.budgets)) settings.budgets = mergeList(local.settings.budgets, r.settings.budgets, deleted);
+  if (local.settings.checkupLast || r.settings.checkupLast) {
+    const last = { ...(r.settings.checkupLast || {}) };
+    for (const [id, d] of Object.entries(local.settings.checkupLast || {})) if (!last[id] || d > last[id]) last[id] = d;
+    settings.checkupLast = last;
+  }
   // Category rules (phase 5): a list by id, the newer rule wins, deleted ones stay deleted (js/learn.js).
   if (Array.isArray(local.settings.rules) || Array.isArray(r.settings.rules)) settings.rules = mergeRules(local.settings.rules, r.settings.rules, deleted, local.settings.updatedAt || 0, r.settings.updatedAt || 0);
   // Learned merchants: both sides, the newer settings winning on the same merchant.

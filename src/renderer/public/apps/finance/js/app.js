@@ -28,6 +28,8 @@ import * as SelfCheck from './screens/selfcheck.js';
 import * as Backups from './screens/backups.js';
 import * as Tidy from './screens/moneytidy.js';
 import * as CashCount from './screens/cashcount.js';
+import * as Repeating from './screens/repeating.js';
+import * as Checkup from './screens/checkup.js';
 import * as Shortcuts from './shortcuts.js';
 import * as Bulk from './bulk.js';
 import { backupBefore } from './dupes.js';
@@ -1102,6 +1104,7 @@ function viewHome() {
   ${stepsCard(today)}
   ${payCard(today)}
   ${CashCount.card(today)}
+  ${Checkup.card(today)}
   ${homeStrip(s, key)}
   ${Spending.spendingCard({ key: 'home', period: ui.spendPeriod })}
   ${Goals.homeCard({ featured: true })}
@@ -1686,7 +1689,7 @@ function viewSettings() {
   };
   // One section at a time, picked on the left (like any settings screen).
   const sections = [
-    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Money3.settingsCard() + Shortcuts.settingsCard() },
+    { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Checkup.settingsCard() + Money3.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
     { id: 'sources', icon: '💼', label: 'Income sources', sub: 'Job 1, Job 2, clients', desc: 'Your own tags for where money comes from. Pick one when you log income, and see each one in Reports.', html: () => IncomeSources.settingsCard() },
@@ -2055,7 +2058,7 @@ function openTxSheet(existing = null, preset = {}) {
         ${isT ? accSelect('from', 'From') + accSelect('to', 'To') : accSelect('account', draft.type === 'income' ? 'Into' : 'Paid from')}
       </div>
       ${!existing && !isT && !draft.fromRule ? `<div class="row2"><label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>
-        <label class="field"><span>Repeat</span><select id="tx-repeat"><option value="">No</option>${FREQS.filter((f) => f.id !== 'once').map((f) => `<option value="${f.id}" ${draft.repeat === f.id ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label></div>`
+        <label class="field"><span>Repeat</span><select id="tx-repeat"><option value="">No</option>${FREQS.filter((f) => f.id !== 'once' && f.id !== 'custom').map((f) => `<option value="${f.id}" ${draft.repeat === f.id ? 'selected' : ''}>${f.label}</option>`).join('')}</select></label></div>`
     : `<label class="field"><span>Date</span><input id="tx-date" type="date" value="${esc(draft.date)}"></label>`}
       ${existing ? Taxes.sheetRow(existing.id) : ''}
       <div class="btns">
@@ -2063,6 +2066,7 @@ function openTxSheet(existing = null, preset = {}) {
         ${existing && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-split">Split</button>' : ''}
         ${existing && existing.type === 'expense' && draft.type === 'expense' ? '<button type="button" class="btn" data-act="tx-split-receipt" title="Divide this receipt across categories or people">Split receipt</button>' : ''}
         ${existing?.type === 'income' && draft.type === 'income' && !existing.loan && !draft.refund ? '<button type="button" class="btn" data-act="tx-allocate">Allocate to goals</button>' : ''}
+        ${existing && !isT && !existing.loan ? '<button type="button" class="btn" data-act="tx-repeat" data-testid="tx-repeat">Repeat this…</button>' : ''}
         ${existing && !isT ? `<button type="button" class="btn" data-act="tx-fav" aria-pressed="${M.isFavorite(state, existing)}">${M.isFavorite(state, existing) ? '★ Favorite' : '☆ Make favorite'}</button>` : ''}
         <button type="submit" class="btn primary">${existing ? 'Save' : 'Add'}</button>
       </div>
@@ -2484,6 +2488,7 @@ function openTxSheet(existing = null, preset = {}) {
         return;
       }
       if (e.target.closest('[data-act="tx-delete"]')) deleteTx(existing.id);
+      if (e.target.closest('[data-act="tx-repeat"]') && existing) { closeSheet(); setTimeout(() => Plan.editRule(null, Repeating.presetFromTx(existing)), 200); }
       if (e.target.closest('[data-act="tx-split"]')) { closeSheet(); setTimeout(() => openSplitSheet(existing), 200); }
       if (e.target.closest('[data-act="tx-split-receipt"]')) { closeSheet(); setTimeout(() => openReceiptSplit(existing), 200); }
       const tagBtn = e.target.closest('.tag-pick[data-tag]');
@@ -3269,6 +3274,8 @@ function onSettingsChange(el) {
     }
     else if (key === 'themeMotion') { st.themeMotion = el.checked; applyTheme(); }
     else if (key === 'sound') { st.sound = el.checked; if (st.sound) sound.test(state); }
+    else if (key === 'checkupOn') st.checkupOn = el.checked;
+    else if (key === 'checkupDay') st.checkupDay = Math.max(1, Math.min(28, Math.round(Number(v)) || 1));
     else if (key === 'cashCountOn') st.cashCountOn = el.checked;
     else if (key === 'cashCountDay') st.cashCountDay = Math.max(0, Math.min(6, Math.round(Number(v)) || 0));
     else if (key === 'everydayLimit') st.everydayLimit = Math.max(0, evalAmount(v) || 0);
@@ -3415,6 +3422,7 @@ document.addEventListener('click', (e) => {
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
   else if (CashCount.onClick(act, el)) { /* weekly cash count card */ }
+  else if (Checkup.onClick(act)) { /* monthly check-up */ }
   else if (Money3.onClick(act, el)) { /* favourites and the emergency fund */ }
   else if (act === 'sq-chip-x') { ui.search = withoutTerm(ui.search, Number(el.dataset.i), state); render(); }
   else if (act === 'shortcuts-help') Shortcuts.openHelp();
