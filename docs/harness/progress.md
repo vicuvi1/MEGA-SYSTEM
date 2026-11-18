@@ -76,6 +76,14 @@ Keep it short and true: anything written here is what the next session will trus
 - Sync: no lost exercises, Waky fields or offline numbers; clock skew and outbox fixed. Sleep/Discipline/food reader fixes.
 - Next: the long-term batch (backups, exports, model config, Electron/Node). Release v1.4.1454.
 
+### 2026-11-18: data that can grow for 10+ years
+- Desktop: one waiting Money change after days offline (latest wins per setting), one database export per change, a too-big change is set aside and shown (Data center → Sync), not blocking.
+- Big app copies travel in pieces (`setting_parts`, migration 025); settings are fetched by size; older app versions can read but not write.
+- The sync's copies (agreed copy, before-restore copy) live in IndexedDB; the routine check skips the merge when nothing changed.
+- Windows release runs the short `SMOKE_SET=release` set; the full smoke stays in CI. Numbers at 40,000 records: `PERF=1 npx vitest run src/renderer/src/web/moneyScale.perf.test.ts`.
+- Not done: Finance Helper's own data is still in localStorage (fits about 20,000 records). Design in DECISIONS.md; it needs its own change and release.
+- Next: that move; then the website's offline queue (it still keeps a waiting change whole in localStorage).
+
 <!-- Template for a new entry:
 ### YYYY-MM-DD: short title
 - Goal:

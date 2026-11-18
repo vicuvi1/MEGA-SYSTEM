@@ -96,6 +96,9 @@ device, so it can't sync from there.
 - **"Could not read … a piece is missing / damaged":** a device refused a download that did not check out; its own
   copy is untouched. Open the app on the device that has the newest Money and press **Sync Money now** there: its
   next save sends every missing piece again.
+- **Sync copies on this device** (the last synced copy of each app) are kept in the browser's bigger storage
+  (IndexedDB), not in the 5 million characters. If that bar shows a note, the copy stayed in the small storage:
+  nothing is lost, tell your helper what the note says.
 - **App storage on this device near 5 million characters:** Data center → Clean up → clear the copy from before a
   restore (a backup with it inside is saved first; Undo puts it back) and the app caches.
 - Nothing in Clean up removes your records. Deletion marks are kept on purpose.

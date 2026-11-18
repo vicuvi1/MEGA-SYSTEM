@@ -382,6 +382,17 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     }
   }
   /**
+   * The big copies are answered from memory and written to IndexedDB right after
+   * (web/bigStore.ts): wait for that write, and say so when it failed.
+   */
+  const stored = async () => {
+    try {
+      await (store as { flush?: () => Promise<void> } | null)?.flush?.()
+    } catch (e) {
+      throw new StorageFullError(`This device's storage is full, so ${label}'s sync copy couldn't be saved here (${String((e as Error)?.message ?? e)}). The cloud copy has it.`)
+    }
+  }
+  /**
    * The copy from before a restore is a whole second copy of the app's data. It is only needed
    * until the restore has settled: once a later sync is confirmed by the server and the copy is
    * more than a day old, it is removed (it used to stay forever and eat the storage).
@@ -507,6 +518,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       if (localRaw != null) {
         try {
           store.setItem(BEFORE_RESTORE, JSON.stringify({ at: new Date(Date.now()).toISOString(), restore: String(remoteNow.restore), raw: localRaw }))
+          await (store as { flush?: () => Promise<void> }).flush?.()
         } catch (e) {
           throw new StorageFullError(
             `This device's storage is full, so a safety copy of ${label} from before the restore couldn't be kept (${String((e as Error)?.name ?? e)}). The restore was not applied here and nothing was changed. Free some space, then sync again.`
@@ -523,6 +535,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       del(UNCONFIRMED)
       agreedRaw = text
       if (text !== localRaw && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+      await stored()
       report({ state: 'ok', okAt: Date.now(), error: null, note: null })
       return { ...none, confirmed: true, got: text !== localRaw ? gotOf(next, localShared) : 0 }
     }
@@ -622,6 +635,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     del(EDITED)
     agreedRaw = next
     if (next !== localRaw && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent(spec.event, { detail: { fromSync: true } }))
+    await stored()
     // Synced only once the SERVER has it (on the desktop a write is saved on this PC first).
     let confirmed = false
     if (wrote != null || checking || get(UNCONFIRMED) != null) {

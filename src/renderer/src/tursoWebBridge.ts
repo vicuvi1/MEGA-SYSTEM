@@ -113,6 +113,7 @@ import { createExtras } from './web/lifeExtras'
 import { createSaga } from './web/sagaApi'
 import { createCareer } from './web/career'
 import { createMoneyApi } from './web/moneyApi'
+import { hostStore } from './web/bigStore'
 import { createSortApi, paysLogged } from './web/moneySort'
 import { NetworkError, SetupNeeded, clearSession, currentSession, remembered, renewSession, serverChangePin, serverLogin, serverSetupPin, sessionValid, setRememberedFlag, signOutOthers, deviceCall } from './web/session'
 import { MIGRATIONS } from '@core/schema'
@@ -183,7 +184,8 @@ const DEFAULT_WEB_BOT_CONFIG: BotBridgeConfig = {
   financeSyncEnabled: true
 }
 
-const store = typeof localStorage !== 'undefined' ? localStorage : null
+// localStorage, with the sync's big copies (the agreed copy, the copy from before a restore) kept in IndexedDB (web/bigStore.ts).
+const store = hostStore()
 const readJson = <T>(key: string): T | null => {
   try {
     const raw = store?.getItem(key)
@@ -315,7 +317,9 @@ export function createTursoWebBridge(): Bridge {
   const authP = mirrorP.then((m) => createWebAuth(m, direct ? undefined : localPinStore()))
   // The embedded apps' data (Sport Track, Finance Helper, Waky, MAN) lives in
   // this browser: copied to Turso and back so every device shows the same.
-  const syncsP = mirrorP.then((m) => {
+  const syncsP = mirrorP.then(async (m) => {
+    // The agreed copies are loaded (and old ones moved out of localStorage) before the first compare.
+    await store?.ready.catch(() => {})
     // Waky's mornings and nights also go into the sleep log (where it has no time yet).
     const wakyToSleep = () =>
       void svcP
@@ -324,7 +328,7 @@ export function createTursoWebBridge(): Bridge {
           if (r.wakes || r.beds) window.dispatchEvent(new CustomEvent('life-sleep-changed'))
         })
         .catch(() => null)
-    const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec, undefined, spec === WAKY ? wakyToSleep : undefined))
+    const list = [SPORT, FINANCE, WAKY, MAN].map((spec) => createAppSync(m, spec, store, spec === WAKY ? wakyToSleep : undefined))
     // On start, each app compares its data with the server's own copy and sends what the cloud lacks.
     for (const s of list) void s.sync({ check: true })
     return list

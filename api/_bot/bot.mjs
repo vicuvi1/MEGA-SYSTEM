@@ -43935,10 +43935,12 @@ var Mirror = class Mirror {
 			const cols = new Set((raw.exec("PRAGMA table_info(desktop_outbox)")[0]?.values ?? []).map((r) => String(r[1])));
 			if (!cols.has("skeys")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN skeys TEXT");
 			if (!cols.has("base")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN base TEXT");
+			if (!cols.has("bval")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN bval TEXT");
+			if (!cols.has("bhas")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN bhas INTEGER");
 			raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox_stuck (id INTEGER PRIMARY KEY, data TEXT NOT NULL, error TEXT, at TEXT, bytes INTEGER, tables TEXT)");
 			this.outboxReady = this.current;
 		}
-		return this.current.prepare("SELECT id, data, skeys, base FROM desktop_outbox ORDER BY id").all();
+		return this.current.prepare("SELECT id, data, skeys, base, bval, bhas FROM desktop_outbox ORDER BY id").all();
 	}
 	/** How many changes wait on this PC (no row is read). */
 	pendingCount() {
@@ -43950,7 +43952,20 @@ var Mirror = class Mirror {
 		return (this.current.raw.exec("SELECT id FROM desktop_outbox ORDER BY id")[0]?.values ?? []).map((r) => Number(r[0]));
 	}
 	pendingRow(id) {
-		return this.current.prepare("SELECT id, data, skeys, base FROM desktop_outbox WHERE id = ?").get(id);
+		return this.current.prepare("SELECT id, data, skeys, base, bval, bhas FROM desktop_outbox WHERE id = ?").get(id);
+	}
+	/** A waiting change as it must be sent: the version it follows and a "before" kept beside it put back in. */
+	loadWrite(row) {
+		const write = decodePending(row.data);
+		if (row.base != null) write.base = row.base;
+		if (row.bhas != null && write.rows?.length === 1) write.rows[0] = {
+			...write.rows[0],
+			before: row.bhas ? {
+				...write.rows[0].key,
+				value: row.bval
+			} : null
+		};
+		return write;
 	}
 	/** Changes this PC could not send because one request can't carry them (kept here, shown in the Data center). */
 	stuckWrites() {
@@ -44028,7 +44043,7 @@ var Mirror = class Mirror {
 		const raw = this.current.raw;
 		raw.run("BEGIN");
 		raw.run("INSERT INTO desktop_outbox_stuck (data, error, at, bytes, tables) VALUES (?, ?, ?, ?, ?)", [
-			row.data,
+			row.bhas != null ? encodePending(write) : row.data,
 			error.slice(0, 240),
 			(/* @__PURE__ */ new Date()).toISOString(),
 			bytes,
@@ -44054,8 +44069,7 @@ var Mirror = class Mirror {
 			for (const id of ids) {
 				const row = this.pendingRow(id);
 				if (!row) continue;
-				const write = decodePending(row.data);
-				if (row.base != null) write.base = row.base;
+				const write = this.loadWrite(row);
 				const bytes = requestBytes(write.changes, this.chunkable);
 				let r;
 				if (bytes > Mirror.MAX_REQUEST) {
@@ -44154,8 +44168,8 @@ var Mirror = class Mirror {
 					const keys = settingKeysOf(changes, rows);
 					if (keys) {
 						const mine = new Set(keys);
-						const waiting = raw.exec("SELECT id, skeys FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC")[0]?.values ?? [];
-						for (const [id, sk] of waiting) {
+						const waiting = raw.exec("SELECT id, skeys, bhas, base FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC")[0]?.values ?? [];
+						for (const [id, sk, bhas, obase] of waiting) {
 							let theirs;
 							try {
 								theirs = JSON.parse(String(sk));
@@ -44164,13 +44178,22 @@ var Mirror = class Mirror {
 							}
 							if (!Array.isArray(theirs) || !theirs.length || !theirs.every((k) => mine.has(k))) continue;
 							const old = this.pendingRow(Number(id));
-							const w = decodePending(old.data);
-							if (w.rebase || !w.rows) continue;
-							for (const r of rows) {
-								const was = w.rows.find((x) => x.t === "settings" && x.key.key === r.key.key);
-								if (was) r.before = was.before;
+							let oldBase;
+							if (bhas != null && obase != null && keys.length === 1 && rows.length === 1) {
+								rows[0].before = Number(bhas) ? {
+									...rows[0].key,
+									value: old.bval
+								} : null;
+								oldBase = String(obase);
+							} else {
+								const w = this.loadWrite(old);
+								if (w.rebase || !w.rows) continue;
+								for (const r of rows) {
+									const was = w.rows.find((x) => x.t === "settings" && x.key.key === r.key.key);
+									if (was) r.before = was.before;
+								}
+								oldBase = w.base;
 							}
-							const oldBase = old.base ?? w.base;
 							const next = raw.exec("SELECT id, base FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1", [old.id])[0]?.values[0];
 							if (next) {
 								nextBase.push({
@@ -44183,13 +44206,24 @@ var Mirror = class Mirror {
 							dropped.push(old);
 						}
 					}
-					raw.run("INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, ?, NULL)", [encodePending({
-						id: version,
-						base: writeBase,
-						version,
-						changes,
-						rows
-					}), keys ? JSON.stringify(keys) : null]);
+					const side = keys?.length === 1 && rows.length === 1;
+					const before = side ? rows[0].before : null;
+					raw.run("INSERT INTO desktop_outbox (data, skeys, base, bval, bhas) VALUES (?, ?, ?, ?, ?)", [
+						encodePending({
+							id: version,
+							base: writeBase,
+							version,
+							changes,
+							rows: side ? [{
+								...rows[0],
+								before: null
+							}] : rows
+						}),
+						keys ? JSON.stringify(keys) : null,
+						writeBase,
+						side && before ? before.value : null,
+						side ? before ? 1 : 0 : null
+					]);
 					const outboxId = Number(raw.exec("SELECT last_insert_rowid()")[0]?.values[0]?.[0]);
 					raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
 					queued = {
@@ -44229,11 +44263,13 @@ var Mirror = class Mirror {
 		try {
 			undoRows(raw, q.local, info);
 			raw.run("DELETE FROM desktop_outbox WHERE id = ?", [q.outboxId]);
-			for (const d of q.dropped) raw.run("INSERT INTO desktop_outbox (id, data, skeys, base) VALUES (?, ?, ?, ?)", [
+			for (const d of q.dropped) raw.run("INSERT INTO desktop_outbox (id, data, skeys, base, bval, bhas) VALUES (?, ?, ?, ?, ?, ?)", [
 				d.id,
 				d.data,
 				d.skeys,
-				d.base
+				d.base,
+				d.bval,
+				d.bhas
 			]);
 			for (const n of q.nextBase) raw.run("UPDATE desktop_outbox SET base = ? WHERE id = ?", [n.base, n.id]);
 			if (base) raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [base]);

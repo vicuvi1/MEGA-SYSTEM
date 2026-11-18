@@ -710,3 +710,13 @@ entry that says why.
 - **Old-client rule:** a client that doesn't know manifests must not write. That is enforced by the schema version (`X-Life-Schema` < 25 → 409 on any write in `api/db.mjs`), which shipped in the same commit as the pieces. Any later change of the manifest format needs a new `lifeParts` number AND a schema bump, for the same reason. Values up to 100,000 characters stay plain so small copies stay readable by every version.
 - **Integrity, not secrecy:** `hash64` (64 bits) names pieces to catch a cut-off or mixed-up download. It is not a security boundary and must never change.
 - **Rules out:** fetching the whole `settings` table in one answer again; sending an app copy as one statement value; a server-side job that rewrites manifests; pruning `setting_parts` by anything but "not in this key's current manifest and old".
+
+### The sync's copies moved to IndexedDB; Money's own data is next (2026-11-18)
+- **Done:** each app's agreed copy and its before-restore copy live in IndexedDB behind `hostStore()` (`web/bigStore.ts`), with a verified one-time move and a fallback to localStorage. Money is in localStorage once instead of up to three times, so the 5-million-character limit is reached at about 20,000 Money records instead of 7,000 to 8,000.
+- **Why these first:** they are read and written only by the host's sync through one `Storage` parameter, and losing one loses no records (the next sync merges again). The move could be made without touching Finance Helper.
+- **Not done, on purpose:** `finance-helper.state` (and `.enc`) still live in localStorage. Finance Helper reads it at start with a plain synchronous call, about 20 places in Life read it the same way (the bots, the Money hub, backups, the sync folder, the restore), the smoke tests seed it there, and the two windows tell each other about changes with the `storage` event. Moving it is its own change, with its own release. The agreed design:
+  1. One store object per window, shared with the Finance frame (`window.parent`), answering from memory, writing to IndexedDB; Finance waits for it before `load()`.
+  2. The old copy leaves localStorage only after the new one read back the same AND the new Finance code has started once on this device (an older cached Finance must never find its data gone).
+  3. A copy that shows up in localStorage later is merged in with Finance's own `mergeLocal` (never replaced).
+  4. A synthetic `storage` event to the other windows on every change; `flush()` awaited by every writer that reports "saved".
+- **Rules out:** deleting the localStorage copy before the read-back check; treating an IndexedDB write as stored without `flush()`; moving `finance-helper.state` by changing only the host or only Finance.

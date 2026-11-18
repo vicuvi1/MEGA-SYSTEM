@@ -34,6 +34,7 @@ import {
 } from '@core/dataCenter'
 import type { DataDeviceSeen, DataUsage } from '@shared/api'
 import { life } from '../bridge'
+import { hostStore } from '../web/bigStore'
 
 /** The apps that keep their own data on the device and sync it as one copy. */
 export const DATA_APPS = [
@@ -265,6 +266,25 @@ export async function gather(sample = true): Promise<Gathered> {
   ])
 
   const meters = quickMeters(local, db)
+  // The sync's own copies (each app's last agreed copy, a copy from before a restore) live in IndexedDB.
+  const bigStore = hostStore()
+  await bigStore?.ready.catch(() => {})
+  const big = bigStore?.status() ?? null
+  const inIdb = (big?.keys ?? []).filter((k) => k.where === 'indexeddb')
+  if (big)
+    meters.push(
+      meter({
+        id: 'synccopies',
+        label: 'Sync copies on this device',
+        where: big.mode === 'indexeddb' ? 'This device (IndexedDB): each app\'s last synced copy, kept out of the small app storage' : 'This device: IndexedDB is not available here, so they stay in the app storage above',
+        used: inIdb.reduce((n, k) => n + k.chars, 0),
+        limit: null,
+        warnAt: null,
+        redAt: null,
+        unit: 'chars',
+        note: big.error ?? undefined
+      })
+    )
   if (estimate?.quota) meters.push(meter({ id: 'browser', label: 'Browser storage for this app', where: 'This device: IndexedDB, caches and the offline copy of the database', used: estimate.usage ?? 0, limit: estimate.quota, warnAt: estimate.quota * 0.7, redAt: estimate.quota * 0.9 }))
   if (history) meters.push(meter({ id: 'history', label: 'Money change history', where: 'This device only (IndexedDB), 90 days kept', used: history.entries, limit: HISTORY_ENTRIES, warnAt: null, redAt: null, unit: 'entries', note: history.sealed ? 'Locked with the Money PIN: its size is known, its entries are not.' : `${sizeLabel(history.bytes)}. The oldest entries drop off by themselves at the limit.` }))
   const lifeBytes = db ? db.tables.filter((t) => t.name !== 'settings').reduce((n, t) => n + t.bytes, 0) : 0
@@ -320,9 +340,9 @@ export async function gather(sample = true): Promise<Gathered> {
     forecasts.push(forecast(m, rates, now))
   }
 
-  const beforeRestore: BeforeRestore[] = local.keys
+  const beforeRestore: BeforeRestore[] = [...local.keys, ...inIdb.map((k) => ({ key: k.key, chars: k.key.length + k.chars }))]
     .filter((x) => x.key.endsWith('_before_restore'))
-    .map((x) => ({ key: x.key, label: DATA_APPS.find((a) => x.key === `life_sync_${a.setting}_before_restore`)?.label ?? x.key, chars: x.chars, at: parse<{ at?: string }>(s?.getItem(x.key))?.at ?? null }))
+    .map((x) => ({ key: x.key, label: DATA_APPS.find((a) => x.key === `life_sync_${a.setting}_before_restore`)?.label ?? x.key, chars: x.chars, at: parse<{ at?: string }>((bigStore ?? s)?.getItem(x.key))?.at ?? null }))
 
   const deleted = (money?.deleted ?? null) as Record<string, number> | null
   const seenList: DeviceSeen[] = devices.map((d) => ({ id: d.id, name: d.name, syncedAt: d.apps?.app_sync_finance ?? null }))

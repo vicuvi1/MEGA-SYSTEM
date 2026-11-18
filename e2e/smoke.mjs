@@ -9357,15 +9357,15 @@ try {
       })
       await pg.click(`${row} [data-testid="dc-before-restore-go"]`)
       if (!/backup with this copy inside is saved first/.test(await pg.textContent(`${row} .dc-confirm`))) throw new Error('the clean-up does not say a backup is saved first')
-      if ((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) == null) throw new Error('the copy went before the confirmation')
+      if ((await pg.evaluate((k) => (window.__lifeStore ?? localStorage).getItem(k), BEFORE)) == null) throw new Error('the copy went before the confirmation')
       await pg.click(`${row} [data-testid="dc-before-restore-yes"]`)
       await pg.waitForFunction((r) => /Cleared \(3\.1 MB freed\)\. Backup saved first/.test(document.querySelector(r)?.textContent ?? ''), row, { timeout: 45000 }).catch(async () => {
         throw new Error(`clearing said: ${await pg.textContent(row)}`)
       })
-      if ((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) != null) throw new Error('the copy is still there after clearing')
+      if ((await pg.evaluate((k) => (window.__lifeStore ?? localStorage).getItem(k), BEFORE)) != null) throw new Error('the copy is still there after clearing')
       await pg.click(`${row} [data-testid="dc-before-restore-undo"]`)
       await pg.waitForFunction((r) => /The copy is back/.test(document.querySelector(r)?.textContent ?? ''), row, { timeout: 15000 })
-      if (((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) ?? '').length < 3_100_000) throw new Error('Undo did not put the copy back')
+      if (((await pg.evaluate((k) => (window.__lifeStore ?? localStorage).getItem(k), BEFORE)) ?? '').length < 3_100_000) throw new Error('Undo did not put the copy back')
       if (process.env.DATA_SHOT) {
         await tab('space')
         await pg.waitForTimeout(700)

@@ -44,7 +44,15 @@ function setup() {
 
 const set = (mirror: Mirror, key: string, value: string) =>
   mirror.write((db) => db.prepare('INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(key, value))
-const outbox = (mirror: Mirror) => mirror.read((db) => (db.prepare('SELECT id, data, skeys, base FROM desktop_outbox ORDER BY id').all() as any[]).map((r) => ({ ...r, write: decodePending(String(r.data)) })))
+// A change of one setting keeps that setting's "before" beside the row (bval / bhas), not inside `data`.
+const outbox = (mirror: Mirror) =>
+  mirror.read((db) =>
+    (db.prepare('SELECT id, data, skeys, base, bval, bhas FROM desktop_outbox ORDER BY id').all() as any[]).map((r) => {
+      const write = decodePending(String(r.data))
+      if (r.bhas != null && write.rows?.length === 1) write.rows[0].before = r.bhas ? { ...write.rows[0].key, value: r.bval } : null
+      return { ...r, write }
+    })
+  )
 const remoteValue = (env: ReturnType<typeof setup>, key: string) => env.remote.exec('SELECT value FROM settings WHERE key = ?', [key])[0]?.values[0]?.[0] ?? null
 const money = (n: number, note = '') => JSON.stringify({ savedAt: n, editedAt: n, data: { tx: Array.from({ length: n }, (_, i) => ({ id: `t${i}`, amount: 100 + i, note })) } })
 

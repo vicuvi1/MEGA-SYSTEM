@@ -9,7 +9,8 @@ export const repo = resolve(dirname(fileURLToPath(import.meta.url)), '../..')
 
 /** A fresh made-up server (e2e/server.mjs) at `clock` (ms); `env` adds settings such as E2E_NO_PIN. */
 export async function startServer(clock = Date.now(), env = {}) {
-  const port = 5800 + Math.floor(Math.random() * 400)
+  // Below 6000: the browser refuses that port (ERR_UNSAFE_PORT), which failed one run in 400.
+  const port = 5800 + Math.floor(Math.random() * 190)
   const server = spawn(process.execPath, [join(repo, 'e2e/server.mjs'), String(port)], { stdio: ['ignore', 'pipe', 'inherit'], env: { ...process.env, E2E_NOW: String(clock), ...env } })
   await new Promise((ok, no) => {
     server.stdout.on('data', (d) => String(d).includes('e2e server') && ok())

@@ -69,7 +69,7 @@ export function indexedDbStore(name = 'life-system-mirror'): MirrorStore {
 
 export class MirrorError extends Error {}
 
-type OutboxRow = { id: number; data: string; skeys: string | null; base: string | null }
+type OutboxRow = { id: number; data: string; skeys: string | null; base: string | null; bval: string | null; bhas: number | null }
 /** What a desktop change did locally besides the change itself, so it can be taken back if the disk save fails. */
 interface Queued { version: string; dropped: OutboxRow[]; nextBase: { id: number; base: string | null }[]; held: { base: string; when: string } | null; outboxId: number; local: RowChange[]; ddl: boolean }
 
@@ -1014,10 +1014,14 @@ export class Mirror {
       const cols = new Set((raw.exec('PRAGMA table_info(desktop_outbox)')[0]?.values ?? []).map((r) => String(r[1])))
       if (!cols.has('skeys')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN skeys TEXT')
       if (!cols.has('base')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN base TEXT')
+      // A change that sets ONE setting keeps that setting's "before" value here, not inside `data`:
+      // a later save of the same setting takes it over without reading the big row (bhas: 1 = there was a value, 0 = none).
+      if (!cols.has('bval')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN bval TEXT')
+      if (!cols.has('bhas')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN bhas INTEGER')
       raw.run('CREATE TABLE IF NOT EXISTS desktop_outbox_stuck (id INTEGER PRIMARY KEY, data TEXT NOT NULL, error TEXT, at TEXT, bytes INTEGER, tables TEXT)')
       this.outboxReady = this.current
     }
-    return this.current.prepare('SELECT id, data, skeys, base FROM desktop_outbox ORDER BY id').all() as { id: number; data: string; skeys: string | null; base: string | null }[]
+    return this.current.prepare('SELECT id, data, skeys, base, bval, bhas FROM desktop_outbox ORDER BY id').all() as OutboxRow[]
   }
   /** How many changes wait on this PC (no row is read). */
   private pendingCount(): number {
@@ -1028,8 +1032,15 @@ export class Mirror {
     if (this.outboxReady !== this.current) this.pending()
     return (this.current.raw.exec('SELECT id FROM desktop_outbox ORDER BY id')[0]?.values ?? []).map((r) => Number(r[0]))
   }
-  private pendingRow(id: number): { id: number; data: string; skeys: string | null; base: string | null } | undefined {
-    return this.current.prepare('SELECT id, data, skeys, base FROM desktop_outbox WHERE id = ?').get(id) as any
+  private pendingRow(id: number): OutboxRow | undefined {
+    return this.current.prepare('SELECT id, data, skeys, base, bval, bhas FROM desktop_outbox WHERE id = ?').get(id) as any
+  }
+  /** A waiting change as it must be sent: the version it follows and a "before" kept beside it put back in. */
+  private loadWrite(row: OutboxRow): PendingWrite {
+    const write = decodePending(row.data)
+    if (row.base != null) write.base = row.base
+    if (row.bhas != null && write.rows?.length === 1) write.rows[0] = { ...write.rows[0], before: row.bhas ? { ...write.rows[0].key, value: row.bval } : null }
+    return write
   }
 
   /** Changes this PC could not send because one request can't carry them (kept here, shown in the Data center). */
@@ -1101,10 +1112,10 @@ export class Mirror {
    * A change one request can never carry is set aside (kept whole on this PC,
    * shown in the Data center) so the changes after it still go out.
    */
-  private setAside(row: { id: number; data: string; base: string | null }, write: PendingWrite, error: string, bytes: number): void {
+  private setAside(row: OutboxRow, write: PendingWrite, error: string, bytes: number): void {
     const raw = this.current.raw
     raw.run('BEGIN')
-    raw.run('INSERT INTO desktop_outbox_stuck (data, error, at, bytes, tables) VALUES (?, ?, ?, ?, ?)', [row.data, error.slice(0, 240), new Date().toISOString(), bytes, touchedTables(write.changes).join(',')])
+    raw.run('INSERT INTO desktop_outbox_stuck (data, error, at, bytes, tables) VALUES (?, ?, ?, ?, ?)', [row.bhas != null ? encodePending(write) : row.data, error.slice(0, 240), new Date().toISOString(), bytes, touchedTables(write.changes).join(',')])
     raw.run('DELETE FROM desktop_outbox WHERE id = ?', [row.id])
     // The next change follows the version this one followed (the server never saw this one).
     const next = raw.exec('SELECT id FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1', [row.id])[0]?.values[0]?.[0]
@@ -1125,8 +1136,7 @@ export class Mirror {
         // Read it again: an earlier merge may have marked it.
         const row = this.pendingRow(id)
         if (!row) continue
-        const write = decodePending(row.data)
-        if (row.base != null) write.base = row.base
+        const write = this.loadWrite(row)
         const bytes = requestBytes(write.changes, this.chunkable)
         let r: { merged: boolean; remap: Remap }
         if (bytes > Mirror.MAX_REQUEST) {
@@ -1229,7 +1239,7 @@ export class Mirror {
           if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return
           const version = crypto.randomUUID()
           let writeBase = this.held && this.held.when === base ? this.held.base : base
-          const dropped: { id: number; data: string; skeys: string | null; base: string | null }[] = []
+          const dropped: OutboxRow[] = []
           const nextBase: { id: number; base: string | null }[] = []
           // The latest value of a setting stands in for the ones still waiting:
           // an earlier waiting change that only set these same keys is replaced
@@ -1237,8 +1247,8 @@ export class Mirror {
           const keys = settingKeysOf(changes, rows)
           if (keys) {
             const mine = new Set(keys)
-            const waiting = raw.exec('SELECT id, skeys FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC')[0]?.values ?? []
-            for (const [id, sk] of waiting) {
+            const waiting = raw.exec('SELECT id, skeys, bhas, base FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC')[0]?.values ?? []
+            for (const [id, sk, bhas, obase] of waiting) {
               let theirs: string[]
               try {
                 theirs = JSON.parse(String(sk))
@@ -1247,13 +1257,20 @@ export class Mirror {
               }
               if (!Array.isArray(theirs) || !theirs.length || !theirs.every((k) => mine.has(k))) continue
               const old = this.pendingRow(Number(id))!
-              const w = decodePending(old.data)
-              if (w.rebase || !w.rows) continue
-              for (const r of rows) {
-                const was = w.rows.find((x) => x.t === 'settings' && x.key.key === r.key.key)
-                if (was) r.before = was.before
+              let oldBase: string
+              if (bhas != null && obase != null && keys.length === 1 && rows.length === 1) {
+                // One setting on both sides: its "before" is beside the row, so the big row is not read apart.
+                rows[0].before = Number(bhas) ? { ...rows[0].key, value: old.bval } : null
+                oldBase = String(obase)
+              } else {
+                const w = this.loadWrite(old)
+                if (w.rebase || !w.rows) continue
+                for (const r of rows) {
+                  const was = w.rows.find((x) => x.t === 'settings' && x.key.key === r.key.key)
+                  if (was) r.before = was.before
+                }
+                oldBase = w.base
               }
-              const oldBase = old.base ?? w.base
               const next = raw.exec('SELECT id, base FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1', [old.id])[0]?.values[0]
               if (next) {
                 nextBase.push({ id: Number(next[0]), base: next[1] == null ? null : String(next[1]) })
@@ -1263,7 +1280,16 @@ export class Mirror {
               dropped.push(old)
             }
           }
-          raw.run('INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, ?, NULL)', [encodePending({ id: version, base: writeBase, version, changes, rows }), keys ? JSON.stringify(keys) : null])
+          // One setting: its "before" value goes beside the row (see pending()).
+          const side = keys?.length === 1 && rows.length === 1
+          const before = side ? rows[0].before : null
+          raw.run('INSERT INTO desktop_outbox (data, skeys, base, bval, bhas) VALUES (?, ?, ?, ?, ?)', [
+            encodePending({ id: version, base: writeBase, version, changes, rows: side ? [{ ...rows[0], before: null }] : rows }),
+            keys ? JSON.stringify(keys) : null,
+            writeBase,
+            side && before ? (before.value as string | null) : null,
+            side ? (before ? 1 : 0) : null
+          ])
           const outboxId = Number(raw.exec('SELECT last_insert_rowid()')[0]?.values[0]?.[0])
           raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
           queued = { version, dropped, nextBase, held: this.held, outboxId, local, ddl: changes.some((c) => /^\s*(CREATE|ALTER|DROP)\s/i.test(c.sql)) }
@@ -1299,7 +1325,7 @@ export class Mirror {
     try {
       undoRows(raw, q.local, info)
       raw.run('DELETE FROM desktop_outbox WHERE id = ?', [q.outboxId])
-      for (const d of q.dropped) raw.run('INSERT INTO desktop_outbox (id, data, skeys, base) VALUES (?, ?, ?, ?)', [d.id, d.data, d.skeys, d.base])
+      for (const d of q.dropped) raw.run('INSERT INTO desktop_outbox (id, data, skeys, base, bval, bhas) VALUES (?, ?, ?, ?, ?, ?)', [d.id, d.data, d.skeys, d.base, d.bval, d.bhas])
       for (const n of q.nextBase) raw.run('UPDATE desktop_outbox SET base = ? WHERE id = ?', [n.base, n.id])
       if (base) raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [base])
       else raw.run("DELETE FROM settings WHERE key = 'data_version'")

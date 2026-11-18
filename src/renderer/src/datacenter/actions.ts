@@ -4,6 +4,7 @@
 // the apps merge or sync.
 import { historyPrunePlan } from '@core/dataCenter'
 import { life } from '../bridge'
+import { hostStore } from '../web/bigStore'
 import { backupNow } from '../DesktopBackups'
 import { download } from '../safety/backupFiles'
 import { saveRiskPoint } from '../safety/riskPoints'
@@ -82,8 +83,9 @@ export interface KeysUndo {
  */
 export async function clearBeforeRestore(keys: string[]): Promise<KeysUndo> {
   const values: Record<string, string> = {}
+  const s = hostStore() ?? localStorage
   for (const k of keys) {
-    const v = localStorage.getItem(k)
+    const v = s.getItem(k)
     if (v != null && k.endsWith('_before_restore')) values[k] = v
   }
   if (!Object.keys(values).length) return { values, chars: 0, backup: '' }
@@ -92,14 +94,15 @@ export async function clearBeforeRestore(keys: string[]): Promise<KeysUndo> {
   const point = await saveRiskPoint('clearing the copy from before a restore', JSON.stringify(snap))
   let chars = 0
   for (const [k, v] of Object.entries(values)) {
-    localStorage.removeItem(k)
+    s.removeItem(k)
     chars += k.length + v.length
   }
+  await s.flush?.()
   safetyChanged()
   return { values, chars, backup: point.name ?? point.id }
 }
 export function undoKeys(u: KeysUndo): void {
-  for (const [k, v] of Object.entries(u.values)) localStorage.setItem(k, v)
+  for (const [k, v] of Object.entries(u.values)) (hostStore() ?? localStorage).setItem(k, v)
 }
 
 // ---------- app caches ----------
