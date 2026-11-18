@@ -1,4 +1,4 @@
-import { dayKey, hourIn } from '@core/dates'
+import { calendarDay, dayKey, hourIn } from '@core/dates'
 import { balance, LedgerError, planUndo, totalXp, effective, type LedgerEntry, type NewEntry } from '@core/ledger'
 import { levelInfo, type StatAllocation } from '@core/levels'
 import { planAward, type Rule } from '@core/rules'
@@ -279,6 +279,15 @@ export class Wallet {
 
   today(now = new Date()): string {
     return dayKey(now, this.timeZone)
+  }
+
+  /**
+   * The real calendar date on the same clock (it turns at midnight, not at 04:00). A Money
+   * record is dated with this, like in Finance Helper: one made at 01:30 on 1 Dec is 1 Dec.
+   * Points and "done today" keep using today().
+   */
+  calendarToday(now = new Date()): string {
+    return calendarDay(now, this.timeZone)
   }
 
   /** The hour (0–23) on the same clock as today(): the configured time zone. */

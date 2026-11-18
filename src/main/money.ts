@@ -117,7 +117,7 @@ export class MoneyService {
 
     // No Finance Helper on this machine (the web app): it gets the expense through the inbox.
     if (!skipFinanceSync && !this.financeHost && this.toFinance) {
-      this.toFinance({ id: `life-exp-${row.id}`, amount: roundedBani, category: category.trim(), note: note?.trim() || category.trim(), date: today, at: now.getTime() })
+      this.toFinance({ id: `life-exp-${row.id}`, amount: roundedBani, category: category.trim(), note: note?.trim() || category.trim(), date: this.wallet.calendarToday(now), at: now.getTime() })
     }
     if (!skipFinanceSync && this.financeHost) {
       this.financeHost.addTransaction({

@@ -313,7 +313,7 @@ export function createWebServices(mirror: Mirror) {
           const ledgerId = s.shop.redeem(id, new Date(), { paid, force: true, finance })
           if (paid > 0 && reward) {
             const shown = cur === 'MDL' ? '' : ` (${paid} ${cur})`
-            queueFinanceExpense(s.db as any, { id: rewardFinId(ledgerId), amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}${shown}`, date: s.wallet.today(), at: Date.now() })
+            queueFinanceExpense(s.db as any, { id: rewardFinId(ledgerId), amount: Math.round(lei * 100), category: 'fun', note: `Reward: ${reward.title}${shown}`, date: s.wallet.calendarToday(), at: Date.now() })
           }
           const money = paid > 0 ? ` · −${paid.toLocaleString('en-US')} ${cur === 'MDL' ? 'lei' : cur} added to Money as Fun` : ''
           return { ...s.shop.state(), lastBuy: { ledgerId, title: reward?.title ?? 'Reward', points: reward?.price ?? 0, paid, currency: cur, toast: `−${(reward?.price ?? 0).toLocaleString('en-US')} points${money}` } }
@@ -344,7 +344,7 @@ export function createWebServices(mirror: Mirror) {
           const now = new Date()
           const today = s.wallet.today(now)
           const ledgerId = s.wallet.append({ ts: now.toISOString(), day: today, module: 'money', kind: 'earn', coins: SAVED_BONUS, xp: 0, ref: `saved:${l.month}`, note: `Saved: ${l.leftLei} lei to ${l.goal.name}` })
-          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: today, at: now.getTime() })
+          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: s.wallet.calendarToday(now), at: now.getTime() })
           s.shop.recordMove(l.month, { lei: l.leftLei, ledgerId, kind: l.kind, goal: l.goal.name })
           return { ...leftover(s), toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}` }
         }, W),
@@ -524,7 +524,7 @@ export function createWebServices(mirror: Mirror) {
           const now = new Date()
           const today = s.wallet.today(now)
           const ledgerId = s.wallet.append({ ts: now.toISOString(), day: today, module: 'money', kind: 'earn', coins: SAVED_BONUS, xp: 0, ref: `saved:${l.month}`, note: `Saved: ${l.leftLei} lei to ${l.goal.name}` })
-          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: today, at: now.getTime() })
+          queueFinanceExpense(s.db as any, { id: savedFinId(l.month, ledgerId), type: 'saving', goalId: l.goal.id, amount: l.leftLei * 100, category: '', note: `Left over from your ${l.kind === 'fun' ? 'fun' : 'month'} budget`, date: s.wallet.calendarToday(now), at: now.getTime() })
           s.shop.recordMove(l.month, { lei: l.leftLei, ledgerId, kind: l.kind, goal: l.goal.name })
           return { ...leftover(s), toast: `+${SAVED_BONUS} points · ${l.leftLei} lei moved to ${l.goal.name}` }
         }, W),

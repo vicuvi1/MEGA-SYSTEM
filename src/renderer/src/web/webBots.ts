@@ -508,14 +508,15 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
   function runMoney(s: Services, text: string, key: string): RunOut | null {
     if (!currentDb) return null
     // The app's command bars (island, Ctrl+K): the main lei wallet unless you name an account (MF1).
-    const money = logMoney(currentDb, text, key, s.wallet.today(), Date.now(), { mainAccount: key.startsWith('quick:') })
+    // The record's date is the real calendar date (01:30 on 1 Dec is 1 Dec), not the app day that turns at 04:00.
+    const money = logMoney(currentDb, text, key, s.wallet.calendarToday(), Date.now(), { mainAccount: key.startsWith('quick:') })
     if (!money) return null
     const t = money.tx
     if (t.type !== 'expense') return { reply: money.reply, keyboard: money.keyboard }
     const res = s.money.addExpense(t.amount, t.category, t.note ? `[Telegram] ${t.note}` : '[Telegram]', new Date(), true)
     linkExpense(currentDb, t.id, res.expense.id)
     // The money coach's context: how often this week, the month against the limit.
-    const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today())
+    const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.calendarToday())
     return { reply: money.reply + (insight ? `\n${esc(insight)}` : '') + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, 'money.logged', 3)} points</b> (first spending logged today)` : ''), keyboard: money.keyboard }
   }
 
@@ -556,7 +557,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
     if (viaFocus) return viaFocus
     // A pasted bank / wallet notification ("Plată: 123,45 MDL la …"): the Phone payments parser, kept to sort (no points).
     const notice = currentDb && !text.startsWith('/') ? pastedNotice(text) : null
-    if (notice) return { reply: esc(pastedReply(capturePayment(currentDb, notice, { at: Date.now(), day: s.wallet.today(), via: 'telegram' }))) }
+    if (notice) return { reply: esc(pastedReply(capturePayment(currentDb, notice, { at: Date.now(), day: s.wallet.calendarToday(), via: 'telegram' }))) }
     const parsed = parseTelegramText(text)
     // "exam on 12 december", "woke up at 7 am": a number, but not money (X2).
     if ((parsed.type === 'expense' || parsed.type === 'unknown') && !text.startsWith('/') && !notMoney(text)) {
@@ -705,7 +706,7 @@ export function createWebBots({ mirror, services, defaults, onExpense, server = 
       // Finance Helper gets it too (see financeInbox.ts).
       if (out.expense) {
         const now = new Date()
-        queueFinanceExpense(db as any, { id: `tg-life-${key.replace(/[^\w-]/g, '-')}`, ...out.expense, date: svc.wallet.today(now), at: now.getTime() })
+        queueFinanceExpense(db as any, { id: `tg-life-${key.replace(/[^\w-]/g, '-')}`, ...out.expense, date: svc.wallet.calendarToday(now), at: now.getTime() })
       }
       return out
     })()

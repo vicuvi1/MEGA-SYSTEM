@@ -17,6 +17,7 @@
 // tombstone. Either way the sync carries it like any other edit.
 
 import { snapshot, diff, apply } from './history.js';
+import { archivedTx } from './archive.js';
 
 export const MAX_ENTRIES = 2000;
 export const MAX_DAYS = 90;
@@ -146,7 +147,9 @@ const listOf = (state, key) => (key.startsWith('settings.') ? state.settings?.[k
 /** The record as it is now (null when it is not there). */
 export function currentOf(state, e) {
   if (!e?.list || !e.rid) return null;
-  return (listOf(state, e.list) || []).find((x) => x && x.id === e.rid) || null;
+  return (listOf(state, e.list) || []).find((x) => x && x.id === e.rid)
+    // A record of an archived year is still there (js/archive.js), only kept elsewhere.
+    || (e.list === 'tx' ? archivedTx(state).find((x) => x.id === e.rid) : null) || null;
 }
 
 /** Putting this entry back would change nothing (the record is already as it was before). */
@@ -182,20 +185,29 @@ export function putBack(state, entries, now = Date.now()) {
  */
 export function createTracker({ dev = deviceLabel(), now = () => Date.now() } = {}) {
   let base = null;
+  let archived = new Set(); // ids in the archived years at `base`
   let next = null; // { mode, of, label } for the coming save (Put back)
+  const archivedIds = (state) => new Set(archivedTx(state).map((t) => t.id));
   return {
     dev,
-    reset(state) { base = state && !state._sealed ? snapshot(state) : null; },
+    reset(state) { base = state && !state._sealed ? snapshot(state) : null; archived = base ? archivedIds(state) : new Set(); },
     /** The coming save is a Put back of entry `of`. */
     expect(info) { next = info; },
     observe(state, mode = 'local') {
       if (!state || state._sealed) { base = null; next = null; return []; }
       const snap = snapshot(state);
-      if (!base) { base = snap; next = null; return []; }
+      const nowArchived = archivedIds(state);
+      if (!base) { base = snap; archived = nowArchived; next = null; return []; }
       const plan = next;
       next = null;
       if (plan?.mode && mode === 'local') mode = plan.mode;
-      const changes = diff(base, snap).filter((c) => LOGGED.includes(c.list));
+      const wasArchived = archived;
+      archived = nowArchived;
+      // Archiving (here or arriving by sync) MOVES records out of the everyday
+      // list, and unarchiving moves them back: neither is a delete or an add,
+      // so "Bring back" can never add a second copy.
+      const moved = (c) => c.list === 'tx' && ((c.kind === 'removed' && nowArchived.has(c.id)) || (c.kind === 'added' && wasArchived.has(c.id)));
+      const changes = diff(base, snap).filter((c) => LOGGED.includes(c.list) && !moved(c));
       if (!changes.length) { base = snap; return []; }
       // A change made here: the record says on which device (other devices log it with that name).
       if (mode === 'local' || mode === 'putback') {

@@ -12,7 +12,7 @@
 // devices, or on a device that is not locked, the Money PIN is asked once
 // (Settings → Data safety) and kept only in this window's memory.
 // @ts-ignore plain JS module from the embedded app
-import { mergeStates, toCloud } from '../../public/apps/finance/js/sync.js'
+import { mergeStates, toCloud, LOCAL_SETTINGS } from '../../public/apps/finance/js/sync.js'
 // @ts-ignore plain JS module from the embedded app
 import { normalizeState, SCHEMA_VERSION } from '../../public/apps/finance/js/model.js'
 // @ts-ignore plain JS module from the embedded app
@@ -53,10 +53,16 @@ export const FINANCE: AppSyncSpec = {
   share,
   fromShared: (data) => normalizeState({ ...data, version: SCHEMA_VERSION }),
   merge: (mine, theirs) => mergeStates(normalizeState(mine), remote(theirs)).state,
-  // After a restore: the restored records and shared settings; this device's own settings (PIN, theme…) and rates stay.
+  // After a restore: the restored records and the backup's shared settings exactly as they were.
+  // Only this device's own settings (theme, Log view) and rates stay. Keeping any shared setting
+  // the backup lacks was wrong: an archive made after the backup stayed next to the restored
+  // records of those years, so they were counted twice.
   adopt: (mine, data) => {
     const { lastRates: _rates, settings, ...rest } = data ?? {}
-    return normalizeState({ ...mine, ...rest, settings: { ...(mine?.settings ?? {}), ...(settings ?? {}) }, version: SCHEMA_VERSION })
+    if (!settings || typeof settings !== 'object') return normalizeState({ ...mine, ...rest, version: SCHEMA_VERSION })
+    const own: Record<string, unknown> = {}
+    for (const k of LOCAL_SETTINGS as string[]) if (mine?.settings && k in mine.settings) own[k] = mine.settings[k]
+    return normalizeState({ ...mine, ...rest, settings: { ...settings, ...own }, version: SCHEMA_VERSION })
   },
   gap: financeGap,
   // Locked with a PIN here, or the cloud copy is sealed: only sealed copies travel (below).

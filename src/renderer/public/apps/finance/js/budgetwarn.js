@@ -20,6 +20,14 @@ export const warningsOn = (state) => state?.settings?.budgetWarn !== false;
 /** The key of one warning: "2026-11:food:80". */
 export const warnKey = (month, cat, level) => `${month}:${cat}:${level}`;
 
+/**
+ * The period a crossing's warning is remembered for. A monthly category
+ * budget: the month ("2026-11"). A weekly, yearly or dated budget: its own
+ * period, written as "~" + its last day ("~2026-12-31"), so a yearly budget
+ * warns once in the year and not again every month.
+ */
+export const periodOf = (c) => (/^\d{4}-\d{2}-\d{2}$/.test(c?.until || '') ? `~${c.until}` : c.month);
+
 /** Each budgeted category at or past 80% this month: { month, cat, name, level, pct, spent, budget }. */
 export function budgetCrossings(state, today) {
   if (!state?.settings?.categories) return [];
@@ -44,9 +52,10 @@ export function newWarnings(crossings, sentKeys = []) {
   const sent = new Set(sentKeys);
   const warn = [];
   for (const c of crossings || []) {
-    const top = warnKey(c.month, c.cat, c.level);
+    const period = periodOf(c);
+    const top = warnKey(period, c.cat, c.level);
     if (!sent.has(top)) warn.push(c);
-    for (const l of LEVELS) if (l <= c.level) sent.add(warnKey(c.month, c.cat, l));
+    for (const l of LEVELS) if (l <= c.level) sent.add(warnKey(period, c.cat, l));
   }
   return { warn, keys: [...sent] };
 }
@@ -57,5 +66,10 @@ export function newWarnings(crossings, sentKeys = []) {
  */
 export const amountsHidden = () => isMoneyHidden();
 
-/** Keeps only this month's keys (the guard starts over each month). */
-export const thisMonthKeys = (keys, month) => (Array.isArray(keys) ? keys.filter((k) => typeof k === 'string' && k.startsWith(`${month}:`)) : []);
+/**
+ * Keeps the keys still in force: this month's, and those of a longer period
+ * ("~" + its last day) that has not ended before this month.
+ */
+export const thisMonthKeys = (keys, month) => (Array.isArray(keys)
+  ? keys.filter((k) => typeof k === 'string' && (k.startsWith(`${month}:`) || (k[0] === '~' && k.slice(1, 11) >= `${month}-01`)))
+  : []);

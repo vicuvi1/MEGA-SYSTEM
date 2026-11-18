@@ -80,6 +80,9 @@ export function kindCrossings(state, today) {
     const id = String(p.budget.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24) || 'b';
     out.push({
       month,
+      // The budget's own period (a week, a year, a trip): the warning is sent once in it, not once a month.
+      from: p.from,
+      until: p.to,
       cat: `bud-${id}-${p.tag.replace(/[^A-Za-z0-9_-]/g, '')}`,
       name: p.budget.name || 'Budget',
       level,

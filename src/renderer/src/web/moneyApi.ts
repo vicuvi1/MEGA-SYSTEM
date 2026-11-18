@@ -91,7 +91,8 @@ export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Pr
       const key = `app-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`
       const out = await (await svcP).write((s) => {
         const today = s.wallet.today()
-        const r = logMoney(s.db as any, t, key, today, Date.now(), { mainAccount: true })
+        // Dated with the real calendar date, like Finance Helper (the app day `today` turns at 04:00 and is only for the points).
+        const r = logMoney(s.db as any, t, key, s.wallet.calendarToday(), Date.now(), { mainAccount: true })
         if (!r) return null
         // The day's first spending log pays, once (same ref as the Finance Helper sync, so never twice).
         let paid = 0

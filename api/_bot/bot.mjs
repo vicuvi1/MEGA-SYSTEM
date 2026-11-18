@@ -4593,8 +4593,8 @@ var MOVES = [
 		}, 1.1, .3)] }
 	}
 ];
-var BY_ID = new Map(MOVES.map((m) => [m.id, m]));
-var moveById = (id) => id ? BY_ID.get(id) ?? null : null;
+var BY_ID$1 = new Map(MOVES.map((m) => [m.id, m]));
+var moveById = (id) => id ? BY_ID$1.get(id) ?? null : null;
 /** "Push-ups", "pushups", "PRESS" → the library move it is, or null. */
 function matchMove(name) {
 	const norm = (s) => s.toLowerCase().replace(/[’']/g, "").replace(/[^a-z0-9]+/g, " ").trim();
@@ -47971,7 +47971,7 @@ var MoneyService = class {
 			amount: roundedBani,
 			category: category.trim(),
 			note: note?.trim() || category.trim(),
-			date: today,
+			date: this.wallet.calendarToday(now),
 			at: now.getTime()
 		});
 		if (!skipFinanceSync && this.financeHost) this.financeHost.addTransaction({
@@ -53832,6 +53832,14 @@ var Wallet = class {
 	today(now = /* @__PURE__ */ new Date()) {
 		return dayKey(now, this.timeZone);
 	}
+	/**
+	* The real calendar date on the same clock (it turns at midnight, not at 04:00). A Money
+	* record is dated with this, like in Finance Helper: one made at 01:30 on 1 Dec is 1 Dec.
+	* Points and "done today" keep using today().
+	*/
+	calendarToday(now = /* @__PURE__ */ new Date()) {
+		return calendarDay(now, this.timeZone);
+	}
 	/** The hour (0–23) on the same clock as today(): the configured time zone. */
 	hour(now = /* @__PURE__ */ new Date()) {
 		return hourIn(now, this.timeZone);
@@ -54831,7 +54839,7 @@ syncFinance: (recordDays) => write((s) => {
 						amount: Math.round(lei * 100),
 						category: "fun",
 						note: `Reward: ${reward.title}${shown}`,
-						date: s.wallet.today(),
+						date: s.wallet.calendarToday(),
 						at: Date.now()
 					});
 				}
@@ -54900,7 +54908,7 @@ syncFinance: (recordDays) => write((s) => {
 					amount: l.leftLei * 100,
 					category: "",
 					note: `Left over from your ${l.kind === "fun" ? "fun" : "month"} budget`,
-					date: today,
+					date: s.wallet.calendarToday(now),
 					at: now.getTime()
 				});
 				s.shop.recordMove(l.month, {
@@ -55121,7 +55129,7 @@ syncFinance: (recordDays) => write((s) => {
 					amount: l.leftLei * 100,
 					category: "",
 					note: `Left over from your ${l.kind === "fun" ? "fun" : "month"} budget`,
-					date: today,
+					date: s.wallet.calendarToday(now),
 					at: now.getTime()
 				});
 				s.shop.recordMove(l.month, {
@@ -58482,13 +58490,44 @@ function loggedText(state, t, today = null) {
 	return lines.join("\n");
 }
 var dayShort = (iso) => `${DOW_SHORT[dowIndex(iso)]} ${Number(iso.slice(8))}`;
-// src/renderer/public/apps/finance/js/sync.js
+// src/renderer/public/apps/finance/js/settingstamp.js
+/** Device-only settings: never travel. */
 var LOCAL_SETTINGS = [
 	"theme",
 	"themeInLife",
 	"themeMotion",
 	"logView"
 ];
+/** Settings lists merged item by item (id + updatedAt, deletions in state.deleted). */
+var BY_ID = [
+	"wishlist",
+	"savedViews",
+	"customFields"
+];
+/** "Last done on" days: the later day wins, whoever saved last. */
+var LATER_DAY = ["cashCountLast", "checkupSnooze"];
+/** Keys with their own merge in sync.js. */
+var OWN_MERGE = [
+	"jars",
+	"incomeSources",
+	"accounts",
+	"categories",
+	"subcats",
+	"subMemory",
+	"rules",
+	"archive",
+	"budgets",
+	"checkupLast",
+	"updatedAt",
+	"changedAt"
+];
+[
+	...LOCAL_SETTINGS,
+	...BY_ID,
+	...LATER_DAY,
+	...OWN_MERGE
+];
+// src/renderer/public/apps/finance/js/sync.js
 function toCloud(state, deviceId, now = Date.now()) {
 	const settings = { ...state.settings };
 	for (const k of LOCAL_SETTINGS) delete settings[k];
@@ -59183,11 +59222,11 @@ function monthSpend(db, today) {
 	const state = financeState(db);
 	if (!state) return null;
 	const month = today.slice(0, 7);
-	const list = expandSplits(state.tx).filter((t) => t && t.type === "expense" && !t.notSpending && !t.deleted && typeof t.date === "string" && t.date.startsWith(month));
+	const list = expandSplits(state.tx).filter((t) => t && !t.deleted && typeof t.date === "string" && t.date.startsWith(month) && countsAsSpending(t));
 	const by = /* @__PURE__ */ new Map();
 	let spentMonth = 0;
 	for (const t of list) {
-		const v = Math.abs(Number(t.base ?? t.amount) || 0);
+		const v = signed$1(t, Math.abs(Number(t.base ?? t.amount) || 0));
 		spentMonth += v;
 		const name = category(state, t.category)?.name || "Other";
 		by.set(name, (by.get(name) ?? 0) + v);
@@ -65027,7 +65066,7 @@ var CALLBACKS = [
 					})();
 				}
 				return db.transaction(() => {
-					const r = moneyButton(db, data, svc.wallet.today());
+					const r = moneyButton(db, data, svc.wallet.calendarToday());
 					const life = r && data.startsWith("fu|") ? takeLink(db, data.split("|")[1]) : null;
 					if (life) try {
 						svc.money.deleteExpense(life);
@@ -67497,7 +67536,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 	*/
 	function runMoney(s, text, key) {
 		if (!currentDb) return null;
-		const money = logMoney(currentDb, text, key, s.wallet.today(), Date.now(), { mainAccount: key.startsWith("quick:") });
+		const money = logMoney(currentDb, text, key, s.wallet.calendarToday(), Date.now(), { mainAccount: key.startsWith("quick:") });
 		if (!money) return null;
 		const t = money.tx;
 		if (t.type !== "expense") return {
@@ -67506,7 +67545,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		};
 		const res = s.money.addExpense(t.amount, t.category, t.note ? `[Telegram] ${t.note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
 		linkExpense(currentDb, t.id, res.expense.id);
-		const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.today());
+		const insight = moneyInsight(financeStateFrom(currentDb, server ? null : store), t, s.wallet.calendarToday());
 		return {
 			reply: money.reply + (insight ? `\n${esc$5(insight)}` : "") + (res.awarded ? `\n🪙 <b>+${ruleCoins(s, "money.logged", 3)} points</b> (first spending logged today)` : ""),
 			keyboard: money.keyboard
@@ -67553,7 +67592,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 		const notice = currentDb && !text.startsWith("/") ? pastedNotice(text) : null;
 		if (notice) return { reply: esc$5(pastedReply(capturePayment(currentDb, notice, {
 			at: Date.now(),
-			day: s.wallet.today(),
+			day: s.wallet.calendarToday(),
 			via: "telegram"
 		}))) };
 		const parsed = parseTelegramText(text);
@@ -67738,7 +67777,7 @@ function createWebBots({ mirror, services, defaults, onExpense, server = false, 
 				queueFinanceExpense(db, {
 					id: `tg-life-${key.replace(/[^\w-]/g, "-")}`,
 					...out.expense,
-					date: svc.wallet.today(now),
+					date: svc.wallet.calendarToday(now),
 					at: now.getTime()
 				});
 			}

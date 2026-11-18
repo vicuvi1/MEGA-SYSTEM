@@ -730,7 +730,10 @@ function logNow(rule, date) {
   if (!rate) { logWithSheet(rule, date); return; }
   const id = txId(rule, date);
   if (!state.tx.some((t) => t.id === id)) {
-    state.tx.push(R.makeTx(rule, date, { id, rate }));
+    const tx = R.makeTx(rule, date, { id, rate });
+    // Logged on purpose after it was taken back: newer than that deletion on every device (js/archive.js buried).
+    if (state.deleted[id]) tx.updatedAt = Math.max(tx.updatedAt, state.deleted[id]) + 1;
+    state.tx.push(tx);
     delete state.deleted[id];
   }
   R.markDone(rule, date);

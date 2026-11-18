@@ -857,7 +857,7 @@ export const CALLBACKS: CallbackHandler[] = [
           })()
         }
         return db.transaction(() => {
-          const r = moneyButton(db as any, data, svc.wallet.today())
+          const r = moneyButton(db as any, data, svc.wallet.calendarToday())
           // Undo removes it from Life System's spending log too.
           const life = r && data.startsWith('fu|') ? takeLink(db, data.split('|')[1]) : null
           if (life) {

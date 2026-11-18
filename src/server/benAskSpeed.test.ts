@@ -171,8 +171,9 @@ describe('Coach chat speed: the owner\'s questions', () => {
     const back = await del.world.bots.undoReply(done.at!, k)
     expect(back.ok).toBe(true)
     expect(await has()).toBe(true)
-    expect(out[MONEY_ASKS[5]].r.reply).toMatch(/You spent 190 lei this month \(3 records\)/)
+    // The points reward (life-reward-41, 15 lei) is not spending, the same as in Finance Helper.
+    expect(out[MONEY_ASKS[5]].r.reply).toMatch(/You spent 175 lei this month \(2 records\)/)
     // Left this month: Finance Helper's limit minus this month's spending.
-    expect(out[MONEY_ASKS[3]].r.reply).toMatch(/You have 4,810 lei left this month \(spent 190 lei of 5,000 lei\)/)
+    expect(out[MONEY_ASKS[3]].r.reply).toMatch(/You have 4,825 lei left this month \(spent 175 lei of 5,000 lei\)/)
   }, 60_000)
 })

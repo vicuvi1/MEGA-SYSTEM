@@ -8,7 +8,7 @@ import { perMonth } from './recurring.js';
 import { ensureTree, memorySub, suggestSub, subOf } from './cattree.js';
 import { isPointsReward, isCorrection, countsAsSpending, countsAsIncome, isRefund, isNotCounted, signed } from './catshare.js';
 import { addRule2, removeRule2, merchantChoice } from './learn.js';
-import { archivedBalanceUpTo, withArchive, forRange } from './archive.js';
+import { archivedBalanceUpTo, withArchive, forRange, archivedTx, openingOf } from './archive.js';
 import { expandSplits } from './splits.js';
 
 // v1: first release. v2: custom multi-currency accounts, people, loans,
@@ -329,7 +329,7 @@ export const savingsJar = (state) => state.settings.jars.find((j) => j.savings) 
 // balance quietly (history and reports stay as they are); "record" logs the
 // difference today as income or spending (e.g. cash that went untracked).
 // Switch an account to another currency (an MDL "Binance" that is really
-// USD). Its records, starting balance and recurring items are converted at
+// USD). Its records (archived years included), starting balance and recurring items are converted at
 // `rate` (1 new = rate old). Each record keeps its value in the main currency
 // (`base`), so reports don't move, and remembers what it was before (`orig`).
 export function changeAccountCurrency(state, accountId, newCur, rate, now = Date.now()) {
@@ -339,7 +339,9 @@ export function changeAccountCurrency(state, accountId, newCur, rate, now = Date
   const baseCur = state.settings.currency;
   const conv = (c) => Math.round(c / rate);
   let n = 0;
-  for (const t of state.tx) {
+  // Archived years too (js/archive.js): their records and the opening balance made from them.
+  const archived = archivedTx(state);
+  for (const t of [...state.tx, ...archived]) {
     if (t.type === 'transfer') {
       if (t.from === accountId) {
         const old = t.amount;
@@ -373,6 +375,7 @@ export function changeAccountCurrency(state, accountId, newCur, rate, now = Date
     if (newCur === baseCur) { t.rate = 1; t.base = t.amount; } else if (t.amount) t.rate = t.base / t.amount;
     t.updatedAt = now; n++;
   }
+  if (archived.length) state.settings.archive.opening = openingOf(archived);
   for (const r of state.recurring || []) {
     if (r.account !== accountId) continue;
     r.amount = conv(r.amount);

@@ -316,9 +316,13 @@ export function appSyncEventLine(e: AppSyncEvent): string {
 
 class StorageFullError extends Error {}
 
+/** How long this device's copy from before a restore is kept (then a confirmed sync removes it). */
+export const BEFORE_RESTORE_KEEP_MS = 24 * 3600_000
+
 /** `onSynced`: after each sync run (e.g. Waky's times go into the sleep log). */
 export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null, onSynced?: () => void) {
   const SYNCED = `life_sync_${spec.setting}` // what both sides last agreed on
+  const BEFORE_RESTORE = `${SYNCED}_before_restore` // this device's data from before a restore it took
   // When you last changed the app here, on the shared edit timeline (below).
   // Cleared once that edit is synced, so an old time never stands for a newer edit.
   const EDITED = `life_sync_${spec.setting}_edited`
@@ -375,6 +379,17 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     } catch {
       /* private window */
     }
+  }
+  /**
+   * The copy from before a restore is a whole second copy of the app's data. It is only needed
+   * until the restore has settled: once a later sync is confirmed by the server and the copy is
+   * more than a day old, it is removed (it used to stay forever and eat the storage).
+   */
+  const clearOldBeforeRestore = () => {
+    const raw = get(BEFORE_RESTORE)
+    if (raw == null) return
+    const at = Date.parse(String(parse(raw)?.at ?? ''))
+    if (!Number.isFinite(at) || Date.now() - at > BEFORE_RESTORE_KEEP_MS) del(BEFORE_RESTORE)
   }
 
   const status: AppSyncStatus = { setting: spec.setting, label, state: 'never', okAt: null, at: null, error: null, note: null, sent: 0, ...(parse(get(STATUS)) ?? {}) }
@@ -461,7 +476,17 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     // This device's copy from before is kept next to it (nothing is lost).
     if (remoteNow?.data && remoteNow.restore && String(remoteNow.restore) !== get(RESTORED)) {
       const mine = parse(localRaw)
-      if (localRaw != null) set(`${SYNCED}_before_restore`, JSON.stringify({ at: new Date().toISOString(), restore: String(remoteNow.restore), raw: localRaw }))
+      // The safety copy first, and for real: if it can't be written, the restore is NOT applied
+      // here (this device's data stays as it is) and the sync says why. The next run tries again.
+      if (localRaw != null) {
+        try {
+          store.setItem(BEFORE_RESTORE, JSON.stringify({ at: new Date(Date.now()).toISOString(), restore: String(remoteNow.restore), raw: localRaw }))
+        } catch (e) {
+          throw new StorageFullError(
+            `This device's storage is full, so a safety copy of ${label} from before the restore couldn't be kept (${String((e as Error)?.name ?? e)}). The restore was not applied here and nothing was changed. Free some space, then sync again.`
+          )
+        }
+      }
       const next = mine != null ? (spec.adopt ?? ((m: any, d: any) => (m && typeof m === 'object' && !Array.isArray(m) && d && typeof d === 'object' && !Array.isArray(d) ? { ...m, ...d } : d)))(mine, remoteNow.data) : fromShared(remoteNow.data)
       const text = JSON.stringify(next)
       if (text !== localRaw) setStrict(spec.localKey, text)
@@ -578,6 +603,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       if (confirmed) del(UNCONFIRMED)
       else set(UNCONFIRMED, '1')
     }
+    if (confirmed) clearOldBeforeRestore()
     if (confirmed) report({ state: 'ok', okAt: Date.now(), error: null, note: null, ...(sent.records ? { sent: sent.records } : {}) })
     else if (wrote != null || checking) report({ state: 'waiting', error: null, note: null })
     return { ok: true, sent: sent.records, changes: sent.other, confirmed, got }

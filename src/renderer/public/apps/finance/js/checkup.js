@@ -70,14 +70,13 @@ export function applyCheckup(state, accountId, real, today, { id = `chk-${uid()}
     };
     state.tx.push(tx);
   }
+  // Only the day (sync keeps the later day per account): the shared settings time is not touched.
   state.settings.checkupLast = { ...(state.settings.checkupLast || {}), [accountId]: today };
-  state.settings.updatedAt = now;
   return { expected, diff, tx };
 }
 
-export function snoozeCheckup(state, today, now = Date.now()) {
+export function snoozeCheckup(state, today) {
   state.settings.checkupSnooze = today;
-  state.settings.updatedAt = now;
 }
 
 export function setCheckup(state, { on, day }, now = Date.now()) {

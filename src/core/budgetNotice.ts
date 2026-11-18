@@ -20,6 +20,9 @@ export interface BudgetCrossing {
   budget: number
   /** "this week's", "this year's", "the" (a trip): how the budget is named in the text. Missing = "this month's". */
   label?: string
+  /** A weekly, yearly or dated budget: its own period (first and last day). The warning is sent once in it. */
+  from?: string
+  until?: string
 }
 
 const MONTH = /^\d{4}-\d{2}$/
@@ -28,11 +31,19 @@ const safeCat = (cat: string) => String(cat).replace(/[^A-Za-z0-9_-]/g, '').slic
 /** The bell id: budget:budgetwarn:<day>:<category>:<level> (the slot and day stay where the push budget reads them). */
 export const budgetNotifId = (day: string, cat: string, level: number): string => `${slotNotifId('budgetwarn', day)}:${safeCat(cat)}:${level}`
 
-/** An entry for this month's warning (same category and level) is already in the bell, from any device. */
-export function alreadyInBell(ids: readonly string[], month: string, cat: string, level: number): boolean {
-  const pre = `budget:budgetwarn:${month}-`
+/**
+ * An entry for this period's warning (same category and level) is already in the bell, from any
+ * device. `since` (a weekly, yearly or dated budget's first day): any entry from that day on counts,
+ * so a yearly budget is not announced again each month.
+ */
+export function alreadyInBell(ids: readonly string[], month: string, cat: string, level: number, since?: string): boolean {
+  const pre = 'budget:budgetwarn:'
   const end = `:${safeCat(cat)}:${level}`
-  return ids.some((id) => typeof id === 'string' && id.startsWith(pre) && id.endsWith(end))
+  return ids.some((id) => {
+    if (typeof id !== 'string' || !id.startsWith(pre) || !id.endsWith(end)) return false
+    const day = id.slice(pre.length, pre.length + 10)
+    return since ? day >= since : day.startsWith(`${month}-`)
+  })
 }
 
 /** "Food: 80% of this month's budget used (1 600 of 2 000 MDL)"; amounts left out when hidden. */
@@ -52,7 +63,7 @@ export function budgetNotices(
   const out: Omit<Notif, 'readAt'>[] = []
   for (const c of warn) {
     if (!c || !MONTH.test(c.month) || !o.day.startsWith(c.month) || (c.level !== 80 && c.level !== 100) || !(c.budget > 0)) continue
-    if (alreadyInBell(o.bellIds, c.month, c.cat, c.level)) continue
+    if (alreadyInBell(o.bellIds, c.month, c.cat, c.level, /^\d{4}-\d{2}-\d{2}$/.test(c.from ?? '') ? c.from : undefined)) continue
     out.push({
       id: budgetNotifId(o.day, c.cat, c.level),
       at: o.now.toISOString(),

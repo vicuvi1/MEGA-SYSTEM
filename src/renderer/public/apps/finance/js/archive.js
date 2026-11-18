@@ -37,6 +37,19 @@ export function openingOf(list) {
   return bal;
 }
 
+// Deleted for good? A deletion (state.deleted: id -> time) hides a record that
+// was not changed after it. One more case: a record a repeating rule made by
+// itself (id rec-<rule>-<date>) and nobody touched since. A device that was
+// offline makes that record again with a LATER time than the deletion, so for
+// it the deletion always wins. Anything done to the record on purpose (Put
+// back, Redo, an edit, "Log now" after a deletion) moves updatedAt past
+// createdAt, and then the usual "newest wins" decides.
+export const ruleMade = (t) => typeof t?.id === 'string' && t.id.startsWith('rec-') && !!t.recurring && (t.updatedAt || 0) === (t.createdAt || 0);
+export const buried = (t, deleted) => {
+  const gone = deleted?.[t?.id];
+  return !!gone && (gone >= (t.updatedAt || 0) || ruleMade(t));
+};
+
 // Every archived record, oldest first.
 export function archivedTx(state) {
   const years = state?.settings?.archive?.years;
@@ -104,6 +117,23 @@ export function archiveBefore(state, beforeYear, now = Date.now()) {
   return move.length;
 }
 
+// Is this record in the archive?
+export const inArchive = (state, id) => archivedTx(state).some((t) => t.id === id);
+
+// Undo / Put back of a record that sits in the archive: `rec` takes its place
+// (null removes it), and the opening balance is worked out again. A record
+// whose date is now on or after the cut-off goes to the everyday list. Returns
+// false when the record is not archived (the caller handles state.tx).
+export function replaceArchived(state, id, rec) {
+  const a = state?.settings?.archive;
+  if (!a?.cutoff || !inArchive(state, id)) return false;
+  const rest = archivedTx(state).filter((t) => t.id !== id);
+  const stays = rec && typeof rec.date === 'string' && rec.date < a.cutoff;
+  state.settings.archive = build(a.cutoff, a.at, stays ? [...rest, rec] : rest);
+  if (rec && !stays) state.tx.push(rec);
+  return true;
+}
+
 // Puts every archived record back, exactly as it was. The empty archive stays
 // as a marker with a new time, so another device does not archive them again.
 export function unarchiveAll(state, now = Date.now()) {
@@ -155,14 +185,14 @@ export function settleArchive(mergedTx, localState, remoteState, deleted = {}) {
   })();
   const byId = new Map();
   const add = (t) => {
-    if (!t || !t.id) return;
+    if (!t || !t.id || buried(t, deleted)) return;
     const mine = byId.get(t.id);
     if (!mine || (t.updatedAt || 0) > (mine.updatedAt || 0)) byId.set(t.id, t);
   };
   for (const t of mergedTx) add(t);
   for (const t of archivedTx(localState)) add(t);
   for (const t of archivedTx(remoteState)) add(t);
-  const alive = [...byId.values()].filter((t) => !(deleted[t.id] && deleted[t.id] >= (t.updatedAt || 0)));
+  const alive = [...byId.values()];
   const at = Number(winner.at) || 0;
   if (!winner.cutoff) return { tx: alive, archive: { v: 1, cutoff: '', at, opening: {}, years: {} } };
   const keep = keptIds({ goalAllocations: [...(localState.goalAllocations || []), ...(remoteState.goalAllocations || [])] });

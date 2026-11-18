@@ -14,6 +14,8 @@ import { normalizeState, SCHEMA_VERSION, category as catOf, account as accOf } f
 // @ts-ignore
 import { toCloud } from '../../public/apps/finance/js/sync.js'
 // @ts-ignore
+import { countsAsSpending, signed } from '../../public/apps/finance/js/catshare.js'
+// @ts-ignore
 import { rateToBase } from '../../public/apps/finance/js/fx.js'
 // @ts-ignore
 import { suggest } from '../../public/apps/finance/js/learn.js'
@@ -332,11 +334,14 @@ export function monthSpend(db: Db, today: string): { spentMonth: number; limit: 
   const state = financeState(db)
   if (!state) return null
   const month = today.slice(0, 7)
-  const list = (expandSplits(state.tx) as any[]).filter((t: any) => t && t.type === 'expense' && !t.notSpending && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month))
+  // The same rule as Finance Helper's month total (js/catshare.js): loans, points rewards,
+  // bank corrections and "doesn't count" records are left out; a refund lowers its category.
+  // A split record counts line by line (js/splits.js).
+  const list = (expandSplits(state.tx) as any[]).filter((t: any) => t && !t.deleted && typeof t.date === 'string' && t.date.startsWith(month) && countsAsSpending(t))
   const by = new Map<string, number>()
   let spentMonth = 0
   for (const t of list) {
-    const v = Math.abs(Number(t.base ?? t.amount) || 0)
+    const v = signed(t, Math.abs(Number(t.base ?? t.amount) || 0))
     spentMonth += v
     const name = catOf(state, t.category)?.name || 'Other'
     by.set(name, (by.get(name) ?? 0) + v)

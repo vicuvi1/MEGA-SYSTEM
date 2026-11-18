@@ -35,15 +35,15 @@ export function applyCashCount(state, accountId, counted, today, { id, now = Dat
     r.tx.cashCount = true;
     state.tx.push(r.tx);
   }
+  // Only the day: sync keeps the later day (js/sync.js LATER_DAY). The shared
+  // settings time is not touched, so a count never overrides another device's settings.
   state.settings.cashCountLast = today;
-  state.settings.updatedAt = now;
   return r;
 }
 
 // "Same as the app": just record the check date.
-export function markCashSame(state, today, now = Date.now()) {
+export function markCashSame(state, today) {
   state.settings.cashCountLast = today;
-  state.settings.updatedAt = now;
 }
 
 export function setCashCount(state, { on, day }, now = Date.now()) {

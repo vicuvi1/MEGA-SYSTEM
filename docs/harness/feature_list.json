@@ -1695,6 +1695,18 @@
    ],
    "evidence": "2026-11-18: tsc clean; 24 unit tests (sizes, thresholds, forecast on a pinned clock, samples, clean-up plans never drop unseen deletion marks); smoke: the new Data center step and the 4 moved Data safety steps pass.",
    "notes": "core/dataCenter.ts; renderer/datacenter/{DataCenter.tsx,usage.ts,actions.ts,dataCenter.css}; web/dataUsage.ts; bridge data.usage / sizeSamples / devicesSeen; desktop IPC data:usage; settings data_size_samples, data_devices_seen; SyncFolderStatus in shared/api.ts. Deletion marks are counted, never dropped (DECISIONS.md). The cloud meter is an estimate; Turso row reads are not measured. No server or bot change."
+  },
+  {
+   "id": "money-audit-fixes-2026-11-18",
+   "area": "money",
+   "title": "Money data safety: 9 audit fixes (settings merge key by key, archive, repeating undo, budget warning periods, calendar dates, restore safety copy)",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/moneyAuditFixes.test.ts",
+    "SMOKE_ONLY=\"Money|Finance|Long pages\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: 21 regression tests (each failed before its fix), tsc clean, full vitest green",
+   "notes": "Merge rules in docs/DECISIONS.md (Money merge rules after the data-safety audit). sw cache v73."
   }
  ]
 }

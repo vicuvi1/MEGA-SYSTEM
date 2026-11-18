@@ -5,9 +5,11 @@
 // and the reverse becomes the redo. Device-only things (meta, rates, theme,
 // the Log view) are never undone. Kept in memory only, for this session.
 
+import { inArchive, replaceArchived } from './archive.js';
+
 const LISTS = ['tx', 'people', 'recurring', 'invoices', 'netWorth', 'goals', 'goalAllocations', 'reconciliations'];
 const SETTING_LISTS = ['accounts', 'categories', 'jars', 'incomeSources'];
-const NOT_UNDONE = new Set(['theme', 'themeMotion', 'logView', 'updatedAt', ...SETTING_LISTS]);
+const NOT_UNDONE = new Set(['theme', 'themeMotion', 'logView', 'updatedAt', 'changedAt', ...SETTING_LISTS]);
 
 const WORDS = {
   tx: ['record', 'records'],
@@ -70,6 +72,14 @@ export function apply(state, changes, now = Date.now()) {
       const old = JSON.parse(c.before);
       for (const k of Object.keys(state.settings)) if (!NOT_UNDONE.has(k) && !(k in old)) delete state.settings[k];
       Object.assign(state.settings, old, { updatedAt: now });
+      continue;
+    }
+    // A record moved to the archived years since (js/archive.js): changed or
+    // removed there, with the opening balance worked out again. Adding its old
+    // version to the everyday list as well would count it twice.
+    if (c.list === 'tx' && inArchive(state, c.id)) {
+      if (c.before == null) { replaceArchived(state, c.id, null); state.deleted[c.id] = now; }
+      else { replaceArchived(state, c.id, { ...JSON.parse(c.before), updatedAt: now }); delete state.deleted[c.id]; }
       continue;
     }
     const arr = listOf(state, c.list);

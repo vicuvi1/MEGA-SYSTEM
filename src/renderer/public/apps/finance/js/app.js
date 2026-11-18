@@ -84,6 +84,7 @@ import { tableHTML, calendarHTML, dayLabelHTML, accountOptionsHTML, accountDispl
 import { sheetHTML, monthTabs } from './sheetview.js';
 import { createHistory } from './history.js';
 import { mergeLocal } from './sync.js';
+import { settingsBase, stampSettings } from './settingstamp.js';
 import { searchTx, searchSummary, SEARCH_HINT, savedFilters, saveFilter, removeFilter } from './search.js';
 import { chipsHTML, withoutTerm } from './searchchips.js';
 import * as Money3 from './screens/money3.js';
@@ -102,6 +103,13 @@ import * as E from './everyday.js';
 let state = load();
 // Undo / redo for this session (js/history.js).
 const history = createHistory();
+// When each plain setting last changed here (js/settingstamp.js): stamped at
+// every save made on this device, so sync merges settings key by key. Whatever
+// starts the undo history over (start, sync, unlock, restore) starts this over too.
+let settingsWas = null;
+const resetHistory = history.reset;
+history.reset = (s) => { resetHistory(s); settingsWas = settingsBase(s); };
+const stampChanged = () => { settingsWas = stampSettings(state, settingsWas); };
 history.reset(state);
 Changes.reset(state); // change history (js/changestore.js)
 const ui = {
@@ -184,6 +192,7 @@ const countUp = (c, key, opts) => (c = Math.round(c / 100) * 100, `<span data-co
 const SAVE_FAILED = 'Could not save. Is your browser storage full or blocked?';
 let holdDepth = 0; // a paste or fill of many cells: every cell saves, but it is one undo step
 function persist({ quiet = false } = {}) {
+  stampChanged();
   if (holdDepth) { if (!saveSoon(state)) toast(SAVE_FAILED); return; }
   const added = Changes.track(state, quiet ? 'quiet' : 'local');
   if (!saveSoon(state)) toast(SAVE_FAILED);
@@ -220,6 +229,7 @@ function commit(opts) {
 // another device" or "changed since".
 function finishRevert(dir, label, of) {
   if (of) Changes.expectRevert(of);
+  stampChanged();
   Changes.track(state, dir < 0 ? 'undo' : 'redo');
   history.reset(state);
   if (!saveSoon(state)) toast(SAVE_FAILED);
@@ -2321,6 +2331,8 @@ function openTxSheet(existing = null, preset = {}) {
       tx.recurring = rule.id;
       markDone(rule, draft.fromRule.date, now);
       state.tx = state.tx.filter((t) => t.id !== tx.id);
+      // Logged on purpose after it was taken back: newer than that deletion on every device (js/archive.js buried).
+      if (state.deleted[tx.id]) tx.updatedAt = Math.max(tx.updatedAt || now, state.deleted[tx.id]) + 1;
       delete state.deleted[tx.id];
     }
     // "Repeat": this record becomes the first of a recurring item.
