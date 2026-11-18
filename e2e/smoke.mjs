@@ -56,11 +56,31 @@ const still = (page, sel) => page.waitForFunction((sel) => {
   return !!r && w.__still.n >= 5
 }, sel, { polling: 'raf', timeout: 10000 })
 const waitedFor = (msg) => (String(msg).split('\n').find((l) => /waiting for/.test(l)) ?? '').trim()
-const step = async (name, fn, { retries = 0 } = {}) => {
+// SMOKE_SET=release: the short desktop release check (.github/workflows/release.yml). The Windows
+// runner is slower and its fonts are taller, and the full suite (130+ steps) failed there far more
+// often than the app was broken. So the release runs only the steps below (sign in, Today, Money
+// basics, sync, backups, the Data center, the sync folder, Settings), each may try once more from
+// the start, and every wait gets twice the time. The FULL suite still runs on every push in CI on
+// Linux (.github/workflows/ci.yml): nothing was removed, the long steps only moved there.
+const RELEASE_SET = [
+  'opens and signs in',
+  'Today shows 3 numbers',
+  'Today shows Ben and the day',
+  'the session lasts 14 days and the cloud backups are read-only',
+  'Money hub: safe to spend',
+  'Money amounts: a 10 EUR quick add',
+  'Today Now: slim top line',
+  'Settings: every section opens with content',
+  'Data center',
+  'no uncaught page errors'
+]
+const RELEASE = process.env.SMOKE_SET === 'release'
+const ONLY = RELEASE ? RELEASE_SET : process.env.SMOKE_ONLY ? process.env.SMOKE_ONLY.split('|') : null
+const step = async (name, fn, { retries = RELEASE ? 1 : 0 } = {}) => {
   // SMOKE_ONLY=<words>: run only the steps whose name has them (handy while working on one part).
   // The sign-in step always runs: every other step needs it.
   // Several parts: separate them with "|" (e.g. SMOKE_ONLY="Sport Track|Body training").
-  if (process.env.SMOKE_ONLY && !process.env.SMOKE_ONLY.split('|').some((w) => name.includes(w)) && !name.startsWith('opens and signs in')) return
+  if (ONLY && !ONLY.some((w) => name.includes(w)) && !name.startsWith('opens and signs in')) return
   for (let attempt = 0; ; attempt++) {
     try {
       await fn()
@@ -120,6 +140,8 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
 const pg = await (await browser.newContext({ viewport: { width: 1440, height: 900 }, ...(process.env.SMOKE_DSF ? { deviceScaleFactor: Number(process.env.SMOKE_DSF) } : {}) })).newPage()
 // SMOKE_CPU=<n>: run the page n times slower (CDP CPU throttling), to find races a slow Windows runner hits.
 if (Number(process.env.SMOKE_CPU) > 1) await (await pg.context().newCDPSession(pg)).send('Emulation.setCPUThrottlingRate', { rate: Number(process.env.SMOKE_CPU) })
+// The release check on Windows: twice the usual 30 s for every wait that names no time of its own.
+if (RELEASE) pg.setDefaultTimeout(60_000)
 const errors = []
 pg.on('pageerror', (e) => errors.push(`${e.message} @ ${pg.url()} ${String(e.stack ?? '').split('\n').slice(0, 4).join(' / ')}`))
 // LT3: anything the Content-Security-Policy blocks is a failure too (main page and the apps).

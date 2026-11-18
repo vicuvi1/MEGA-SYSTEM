@@ -51,12 +51,18 @@ jobs:
       - run: node node_modules/electron/install.js
       - run: npm test
       - run: npx tsc --noEmit -p tsconfig.json
-      # The real app must work before an installer is published.
-      - name: Smoke test
+      # The real app must work before an installer is published. This is the short
+      # desktop set (sign in, Today, Money basics, sync, backups, Data center, sync
+      # folder, Settings; each step may try once more, waits get twice the time).
+      # The full suite runs on every push in ci.yml on Linux; a red CI still means
+      # "don't ship". See docs/areas/ops.md "Release check".
+      - name: Smoke test (desktop release set)
         run: |
           npm run build:web
           npx playwright install chromium
           node e2e/smoke.mjs
+        env:
+          SMOKE_SET: release
       - name: Version
         shell: bash
         run: |

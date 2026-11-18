@@ -58,7 +58,11 @@ Runbook for getting data back: [`docs/RECOVERY.md`](../RECOVERY.md). Settings â†
   - The code-signing certificate also has an end date: see [`docs/code-signing.md`](../code-signing.md).
 - **The first PIN** needs `CRON_SECRET` (or `PIN_SETUP_SECRET`) on the server: see [security.md](security.md). A database that never had a PIN opens for nobody until it is set.
 
-- **Checks before shipping:** `.github/workflows/ci.yml` (tsc, vitest, bundle up to date, build, smoke test under the real CSP). Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. The Windows release (`release.yml`) runs the same smoke test and opens the app on Windows before publishing.
+- **Checks before shipping:** `.github/workflows/ci.yml` (tsc, vitest, bundle up to date, build, smoke test under the real CSP). Vercel's `vercel-build` runs tests + tsc, so a red commit never goes live. The Windows release (`release.yml`) runs the short release set of that smoke test and opens the app on Windows before publishing.
+- **Release check (2026-11-18).** Of the last 20 Windows release runs only 7 passed: the full smoke test (130+ steps, 9,500 lines) ran on a slower runner with taller fonts and failed on timing far more often than the app was broken, and every red run blocked every installer. Now:
+  - `release.yml` runs `SMOKE_SET=release node e2e/smoke.mjs`: sign in, Today (3 numbers, Ben and the day, Now), Money hub and amounts, Settings sections, every Data center step (space bars, sync now, Sync Money now, sync history, backups with export and restore, the sync folder) and "no uncaught page errors". The list is `RELEASE_SET` at the top of `e2e/smoke.mjs`. In this set each step may try once more from the start and waits without their own time get 60 s. It passes with the page 4 times slower (`SMOKE_CPU=4`, about 80 s locally).
+  - The FULL suite still runs on every push in `ci.yml` on Linux, and the unit tests on both systems. No step was removed or skipped; the long ones only run in CI. A red CI still means "don't ship": look at CI as well as `bash scripts/release-status.sh`.
+  - To add a step to the release set, add a part of its name to `RELEASE_SET`; it must pass alone after sign-in (`SMOKE_SET=release SMOKE_CPU=4 node e2e/smoke.mjs`) and must not need a step that is not in the set.
 
 - **System health:** beats in `sys_health`, errors in `sys_error_log` (`systemHealth.ts`), checks in `src/core/health.ts`. Ben warns on Telegram after 30 min broken, says when fixed, Sunday report. Settings â†’ System health.
 
