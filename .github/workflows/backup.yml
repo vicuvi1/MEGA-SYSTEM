@@ -78,7 +78,7 @@ jobs:
           echo "BYTES=$(stat -c %s "$out")" >> "$GITHUB_ENV"
           rm -rf snap.json.gz parts list.json
           ls -l out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: life-backup-${{ env.DAY }}
           path: out/*.enc
