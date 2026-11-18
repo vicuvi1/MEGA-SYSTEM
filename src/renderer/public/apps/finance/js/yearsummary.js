@@ -11,6 +11,7 @@
 import { monthFlows, netWorthHistory } from './longview.js';
 import { countsAsSpending, countsAsIncome, isRefund } from './catshare.js';
 import { B } from './model.js';
+import { txSourceId, sourceName } from './incomesources.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const sameDayLastYear = (iso) => {
@@ -24,13 +25,6 @@ function categoryTotals(state, from, to) {
   const out = new Map();
   for (const m of monthFlows(state, { from, to }).values()) for (const [cat, v] of m.byCat) out.set(cat, (out.get(cat) || 0) + v);
   return out;
-}
-
-// The names of income sources, when Money has them (settings.incomeSources: [{ id, name }]).
-function sourceName(state, id) {
-  const list = state.settings?.incomeSources;
-  const hit = Array.isArray(list) ? list.find((s) => s && (s.id === id || s === id)) : null;
-  return (hit && typeof hit === 'object' ? hit.name : null) || String(id);
 }
 
 export function yearSummary(state, year, today) {
@@ -83,11 +77,11 @@ export function yearSummary(state, year, today) {
   let anySource = false;
   for (const t of inYear) {
     if (!countsAsIncome(t)) continue;
-    const s = typeof t.source === 'string' && t.source ? t.source : null;
+    const s = txSourceId(state, t);
     if (s) anySource = true;
     bySource.set(s || '', (bySource.get(s || '') || 0) + B(t));
   }
-  const sources = anySource ? [...bySource].map(([id, amount]) => ({ id, name: id ? sourceName(state, id) : 'No source', amount, share: income > 0 ? amount / income : 0 })).sort((a, b) => b.amount - a.amount) : null;
+  const sources = anySource ? [...bySource].map(([id, amount]) => ({ id, name: id ? sourceName(state, id) || id : 'No source', amount, share: income > 0 ? amount / income : 0 })).sort((a, b) => b.amount - a.amount) : null;
 
   return {
     year: y, from, to, partial, months, income, spending, net: income - spending,

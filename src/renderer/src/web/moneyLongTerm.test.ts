@@ -292,8 +292,8 @@ describe('year summary', () => {
   it('income by source appears only when records carry a source', () => {
     const s = data()
     expect(yearSummary(s, 2026, '2026-12-31').sources).toBeNull()
-    s.tx.find((t: any) => t.date === '2026-01-10').source = 'job'
-    s.settings.incomeSources = [{ id: 'job', name: 'Day job' }]
+    s.tx.find((t: any) => t.date === '2026-01-10').incomeSource = 'job'
+    s.settings.incomeSources = [{ id: 'job', name: 'Day job', createdAt: 1, updatedAt: 1 }]
     const y = yearSummary(s, 2026, '2026-12-31')
     expect(y.sources.find((x: any) => x.id === 'job')).toMatchObject({ name: 'Day job', amount: 1000000 })
     expect(y.sources.find((x: any) => x.id === '')).toMatchObject({ name: 'No source', amount: 1200000 })
