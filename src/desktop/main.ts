@@ -10,6 +10,7 @@ import { execFile } from 'node:child_process'
 import { Updater } from '../main/updater'
 import { autoUpdater } from 'electron-updater'
 import { createIsland } from './island'
+import { ISLAND_AVAILABLE } from '../core/modules'
 import { appFile, rendererRoot } from './appFiles'
 import { createQuickAdd } from './quickWin'
 import { keyLabel } from './quickKeys'
@@ -392,7 +393,7 @@ if (firstCopy) void app.whenReady().then(async () => {
     { label: 'Open Life System', click: () => showApp() },
     { label: `Quick add (${keyLabel(quick.shortcut())})`, click: () => quick.open() },
     // The Dynamic island module is off (Settings → Modules): no island and none of its menu items.
-    ...(!island.moduleOn() ? [{ label: 'Island is off (Settings → Modules)', click: () => showApp('settings') }] : [
+    ...(!ISLAND_AVAILABLE ? [] : !island.moduleOn() ? [{ label: 'Island is off (Settings → Modules)', click: () => showApp('settings') }] : [
     { label: `Show the island (${island.shortcut.replace('Control', 'Ctrl')})`, type: 'checkbox' as const, checked: island.enabled(), click: (item: Electron.MenuItem) => { island.setEnabled(item.checked); tray.setContextMenu(menu()) } },
     // H1: hide it for a while or bring it back; move it with the arrow keys.
     ...islandMoveMenu(island, () => tray.setContextMenu(menu())),

@@ -372,7 +372,18 @@ export function setModule(m: ModulesOn, id: ModuleId, on: boolean): ModulesOn {
   return readModules({ on: { ...m, [id]: on } })
 }
 
-export const isOn = (m: ModulesOn, id: ModuleId): boolean => m[id] !== false
+/**
+ * Kill switch for the Dynamic island (owner, Nov 2026: "delete it for now").
+ * Set to true to bring the Dynamic island back.
+ * While false the island window, its shortcuts, tick and watcher never start, and it is hidden from
+ * Settings, the Edit menu, the tray and the palette. The saved module setting is kept, only ignored.
+ */
+export const ISLAND_AVAILABLE = false
+
+export const isOn = (m: ModulesOn, id: ModuleId): boolean => (id === 'island' && !ISLAND_AVAILABLE ? false : m[id] !== false)
+
+/** The modules Settings and the Edit menu list (the island is left out while it is switched off above). */
+export const LISTED_MODULES: ModuleDef[] = MODULE_LIST.filter((m) => ISLAND_AVAILABLE || m.id !== 'island')
 
 /** The module a page belongs to; null for system pages (Settings, Connected apps, Telegram bots). */
 export function pageModule(page: string): ModuleId | null {

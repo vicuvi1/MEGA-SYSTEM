@@ -129,6 +129,9 @@ await pg.route(/api\.telegram\.org|fonts\.(googleapis|gstatic)\.com/, (r) => r.f
 // for themselves and switch everything on again at their end. Keep MODULE_IDS in step with core/modules.ts.
 const MODULE_IDS = ['today', 'money', 'sleep', 'sport', 'discipline', 'study', 'calendar', 'tasks', 'coach', 'goals', 'season', 'career', 'insights', 'rewards', 'locker', 'music', 'custom', 'focusBoost', 'island', 'growth', 'notebook', 'plugins']
 const DEFAULT_ON = ['today', 'money', 'sleep', 'sport', 'discipline']
+// Keep in step with ISLAND_AVAILABLE in core/modules.ts. While the Dynamic island is switched off it is in no list.
+const ISLAND_AVAILABLE = false
+const LISTED_IDS = MODULE_IDS.filter((id) => ISLAND_AVAILABLE || id !== 'island')
 /** Writes `modules_on` straight into the made-up database before the page opens (null = removed: the owner's default). */
 const setSetting = async (stmt) => {
   // Written like the app's own tracked change (web/tableVersions.ts trackStatements): the settings table gets a new
@@ -360,7 +363,7 @@ try {
   const modulesUi = async (page, onIds) => {
     await page.click('aside.sb [data-testid="sb-modules-link"]')
     await page.waitForSelector('[data-testid="modules"] .mod-list li[data-module="money"] [role="switch"]', { timeout: 10000 })
-    for (const id of MODULE_IDS) {
+    for (const id of LISTED_IDS) {
       if (id === 'today') continue
       const sw = page.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`)
       const want = onIds.includes(id) ? 'true' : 'false'
@@ -475,9 +478,10 @@ try {
       await pg.click('aside.sb [data-testid="sb-modules-link"]')
       await pg.waitForSelector('[data-testid="modules"] .mod-list li[data-module="study"]', { timeout: 10000 })
       const rows = await pg.locator('[data-testid="modules"] .mod-list li').count()
-      if (rows !== MODULE_IDS.length) throw new Error(`Settings → Modules lists ${rows} modules, not ${MODULE_IDS.length}`)
+      if (rows !== LISTED_IDS.length) throw new Error(`Settings → Modules lists ${rows} modules, not ${LISTED_IDS.length}`)
+      if (!ISLAND_AVAILABLE && (await pg.locator('[data-testid="modules"] li[data-module="island"]').count())) throw new Error('Settings → Modules still lists the Dynamic island')
       for (const id of DEFAULT_ON.filter((x) => x !== 'today')) if ((await pg.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`).getAttribute('aria-checked')) !== 'true') throw new Error(`${id} is not on by default`)
-      for (const id of ['study', 'island', 'coach', 'calendar']) if ((await pg.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`).getAttribute('aria-checked')) !== 'false') throw new Error(`${id} is not off by default`)
+      for (const id of ['study', ...(ISLAND_AVAILABLE ? ['island'] : []), 'coach', 'calendar']) if ((await pg.locator(`[data-testid="modules"] li[data-module="${id}"] [role="switch"]`).getAttribute('aria-checked')) !== 'false') throw new Error(`${id} is not off by default`)
       if (process.env.MODULES_SHOTS) {
         await pg.addStyleTag({ content: '.toasts, .nt-stack { display: none !important; }' })
         await pg.waitForTimeout(600)
@@ -544,6 +548,7 @@ try {
       const off = await dp.evaluate(() => ({ ...window.__desk }))
       if (off.module[off.module.length - 1] !== false) throw new Error(`the desktop was told ${JSON.stringify(off.module)}`)
       if (off.states || off.feed) throw new Error(`the island feed ran while it is off (${off.states} snapshots)`)
+      if (!ISLAND_AVAILABLE) return // switched off for now: no island row to turn on (see core/modules.ts)
       // On from Settings → Modules: the desktop is told at once (no restart) and the snapshots start.
       await dp.click('aside.sb [data-testid="sb-modules-link"]')
       await dp.click('[data-testid="modules"] li[data-module="island"] [role="switch"]')

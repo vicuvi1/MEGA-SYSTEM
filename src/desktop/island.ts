@@ -28,6 +28,7 @@
 // Size: the page scales itself with CSS (`scale` in island:prefs). The island
 // page has the same origin as the app, and Chromium shares page zoom per
 // origin, so zooming the island would zoom the app too: its zoom stays locked.
+import { ISLAND_AVAILABLE } from '../core/modules'
 import { app, BrowserWindow, clipboard, globalShortcut, ipcMain, powerMonitor, screen, shell } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
@@ -355,7 +356,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
   const open = () => {
     if (win && !win.isDestroyed()) return
     // The Dynamic island module is off: no window, so none of its timers, sounds or notices run.
-    if (!moduleOn) return
+    if (!ISLAND_AVAILABLE || !moduleOn) return
     ready = false
     inside = null
     inWin = null
@@ -1039,7 +1040,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     }
   }
   const startWatcher = () => {
-    if (process.platform !== 'win32' || watcher) return
+    if (!ISLAND_AVAILABLE || process.platform !== 'win32' || watcher) return
     // P2: the app in front, only when you turned it on (Settings → Ben on this PC); the title only with "titles".
     const pc = o.pc?.() ?? { activeApp: false, titles: false }
     const cs = [
@@ -1202,7 +1203,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     bound[slot] = ''
     failed.delete(slot)
     const acc = wanted(slot)
-    if (!acc) return true
+    if (!ISLAND_AVAILABLE || !acc) return true
     let ok = false
     try { ok = globalShortcut.register(acc, actions[slot]) } catch { ok = false }
     if (ok) { bound[slot] = acc; return true }
@@ -1352,9 +1353,9 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     capture: () => openFor('capture'),
     voice: () => openFor('voice'),
     restartWatcher,
-    enabled: () => enabled && moduleOn,
+    enabled: () => ISLAND_AVAILABLE && enabled && moduleOn,
     /** The Dynamic island module is on (Settings → Modules). */
-    moduleOn: () => moduleOn,
+    moduleOn: () => ISLAND_AVAILABLE && moduleOn,
     /** Meetings (MT1): in a call now (mic / camera, or a calendar meeting). */
     inCall,
     /** Island 2 (islandKit.ts): an event for the page, is this the page, the island's own shortcuts, shown now. */
@@ -1408,7 +1409,7 @@ export function createIsland(o: { origin: string; preload: string; appWindow: Br
     },
     /** The module switch: off closes the window (nothing is deleted), on opens it now when it is shown. */
     setModule(on: boolean) {
-      if (on === moduleOn) return
+      if (!ISLAND_AVAILABLE || on === moduleOn) return
       moduleOn = on
       savePrefs()
       if (on && enabled) open()

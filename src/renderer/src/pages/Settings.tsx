@@ -4,6 +4,7 @@ import { UpdatePanel } from '../updates'
 import { features } from '../bridge'
 import { PcPrivacyPanel } from '../PcPrivacyPanel'
 import { IslandEyesPanel } from '../IslandEyesPanel'
+import { ISLAND_AVAILABLE } from '@core/modules'
 import { IslandSettingsPanel } from '../IslandSettingsPanel'
 import { HealthPanel } from '../HealthPanel'
 import { AiAppsPanel } from '../AiAppsPanel'
@@ -198,7 +199,7 @@ export function Settings(props: SettingsProps) {
     },
     ...(window.desktop
       ? [
-    {
+    ...(!ISLAND_AVAILABLE ? [] : [{
       id: 'desktop',
       label: 'Desktop & island',
       icon: 'island',
@@ -206,7 +207,7 @@ export function Settings(props: SettingsProps) {
       keywords: 'island dynamic size look see-through shortcut sound sections tray',
       jump: 'h3.is-sec',
       body: <IslandSettingsPanel />
-    },
+    }]),
     {
       id: 'pc',
       label: 'Ben on this PC',
@@ -215,14 +216,14 @@ export function Settings(props: SettingsProps) {
       keywords: 'privacy pc computer app activity focus distraction clipboard idle sensors block sites do not disturb shortcuts',
       body: <PcPrivacyPanel />
     },
-    {
+    ...(!ISLAND_AVAILABLE ? [] : [{
       id: 'eyes',
       label: 'Island eyes',
       icon: 'eye',
       hint: 'Let the island read the window in front (off until you turn it on)',
       keywords: 'eyes read screen window text ocr caption florence model download privacy pause private list what the eyes saw',
       body: <IslandEyesPanel />
-    },
+    }]),
         ]
       : []),
     {
@@ -257,8 +258,8 @@ export function Settings(props: SettingsProps) {
       id: 'diagnostics',
       label: 'Diagnostics',
       icon: 'list',
-      hint: 'Island taps and logs',
-      keywords: 'logs diagnostics island tap debug',
+      hint: ISLAND_AVAILABLE ? 'Island taps and logs' : 'Problems and logs',
+      keywords: ISLAND_AVAILABLE ? 'logs diagnostics island tap debug' : 'logs diagnostics debug',
       advanced: true,
       body: <DiagnosticsSection s={s} />
     },

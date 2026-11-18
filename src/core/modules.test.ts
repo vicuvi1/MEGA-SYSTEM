@@ -8,6 +8,8 @@ import {
   altPage,
   commandModule,
   islandOff,
+  ISLAND_AVAILABLE,
+  LISTED_MODULES,
   isOn,
   jobOn,
   menuPages,
@@ -145,7 +147,24 @@ describe('island without the off modules', () => {
     expect(out.water).toEqual(snap.water)
     expect(out.money).toEqual(snap.money)
     expect((out as any).off).toContain('coach')
-    expect(islandWithout(snap, ALL_ON)).toBe(snap)
+    // The island is switched off by ISLAND_AVAILABLE, so ALL_ON still lists it as off (it has no sections of its own).
+    if (ISLAND_AVAILABLE) expect(islandWithout(snap, ALL_ON)).toBe(snap)
+    else expect(islandWithout(snap, ALL_ON)).toMatchObject({ ...snap, off: ['island'] })
     expect(islandWithout(snap, setModule(DEFAULT_MODULES, 'sport', false)).water).toEqual({ ml: 0, target: 0 })
+  })
+})
+
+describe('the Dynamic island kill switch', () => {
+  it('is off for now: the island module counts as off even when the saved setting says on', () => {
+    const saved = readModules({ on: { island: true } })
+    expect(saved.island).toBe(true) // the saved choice is kept untouched
+    if (!ISLAND_AVAILABLE) {
+      expect(isOn(saved, 'island')).toBe(false)
+      expect(LISTED_MODULES.some((m) => m.id === 'island')).toBe(false)
+      expect(islandOff(saved)).toEqual(islandOff({ ...saved, island: false }))
+    } else {
+      expect(isOn(saved, 'island')).toBe(true)
+      expect(LISTED_MODULES.some((m) => m.id === 'island')).toBe(true)
+    }
   })
 })

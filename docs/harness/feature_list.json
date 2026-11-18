@@ -1588,6 +1588,20 @@
    ],
    "evidence": "2026-11-17: smoke step checks the sidebar balance card top-left on Home and Log; no Home balance block.",
    "notes": "finance css/app.css html[data-in-life] block, js/app.js renderLifeTabs (phone only); sw cache v66."
+  },
+  {
+   "id": "F-ISLAND-OFF",
+   "priority": 2,
+   "area": "island",
+   "title": "Dynamic island switched off for now",
+   "user_visible_behavior": "The island window, its shortcuts, tray items, Settings sections and its Modules entry are gone; focus timer and notifications work as with the module off. One switch (ISLAND_AVAILABLE in src/core/modules.ts) brings it back.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/modules.test.ts",
+    "SMOKE_ONLY=\"Modules\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: tsc and unit tests pass; smoke could not build in the sandbox (missing onnxruntime-web), left to CI.",
+   "notes": "Keep ISLAND_AVAILABLE in e2e/smoke.mjs in step."
   }
  ]
 }

@@ -2,7 +2,7 @@
 // Off means off: gone from the menu, Ctrl+K, Today, the island and notifications, and its
 // background jobs stop on this PC and on the server. Nothing is deleted: on again, it is back
 // at once with all its data.
-import { MODULE_LIST, type ModuleId } from '@core/modules'
+import { LISTED_MODULES as MODULE_LIST, type ModuleId } from '@core/modules'
 import { life } from '../bridge'
 import { Switch } from '../settingsUi'
 import { Icon } from '../Icon'

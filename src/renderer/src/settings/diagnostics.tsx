@@ -1,5 +1,6 @@
 // Settings → diagnostics (LT11: split out of pages/Settings.tsx; the state lives in useSettingsState).
 import { features, life } from '../bridge'
+import { ISLAND_AVAILABLE } from '@core/modules'
 import { IslandLogPanel } from '../IslandLogPanel'
 import { Icon } from '../Icon'
 import { timeAgo } from '../ui'
@@ -9,7 +10,7 @@ export function DiagnosticsSection({ s }: { s: SettingsState }) {
   const { act, logs, setLogs } = s
   return (
         <>
-      <IslandLogPanel />
+      {ISLAND_AVAILABLE && <IslandLogPanel />}
       <section className="panel">
         <header className="panel-head">
           <h2>
