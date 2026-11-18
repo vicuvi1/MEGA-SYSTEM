@@ -8,7 +8,7 @@ import { normalizeState, SCHEMA_VERSION } from './model.js';
 import { mergeRules } from './learn.js';
 
 const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
-const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'accounts', 'categories', 'subcats', 'subMemory', 'rules', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
+const SCALARS = (s) => Object.keys(s).filter((k) => !['jars', 'incomeSources', 'accounts', 'categories', 'subcats', 'subMemory', 'rules', 'updatedAt', ...LOCAL_SETTINGS].includes(k));
 
 // What goes to Drive.
 export function toCloud(state, deviceId, now = Date.now()) {
@@ -98,6 +98,8 @@ export function mergeStates(local, remote) {
   settings.accounts.sort((a, b) => (Number.isFinite(a.order) ? a.order : 1e6) - (Number.isFinite(b.order) ? b.order : 1e6));
   settings.categories = mergeList(local.settings.categories, r.settings.categories, deleted);
   settings.jars = mergeList(local.settings.jars, r.settings.jars, deleted);
+  // Income sources (js/incomesources.js): a list by id, the newer copy of each wins; archived ones stay, an undone add stays deleted.
+  if (Array.isArray(local.settings.incomeSources) || Array.isArray(r.settings.incomeSources)) settings.incomeSources = mergeList(local.settings.incomeSources, r.settings.incomeSources, deleted);
   settings.subcats = mergeList(local.settings.subcats, r.settings.subcats, deleted);
   // Category rules (phase 5): a list by id, the newer rule wins, deleted ones stay deleted (js/learn.js).
   if (Array.isArray(local.settings.rules) || Array.isArray(r.settings.rules)) settings.rules = mergeRules(local.settings.rules, r.settings.rules, deleted, local.settings.updatedAt || 0, r.settings.updatedAt || 0);

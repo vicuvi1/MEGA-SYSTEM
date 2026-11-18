@@ -6,7 +6,7 @@
 // the Log view) are never undone. Kept in memory only, for this session.
 
 const LISTS = ['tx', 'people', 'recurring', 'invoices', 'netWorth', 'goals', 'goalAllocations', 'reconciliations'];
-const SETTING_LISTS = ['accounts', 'categories', 'jars'];
+const SETTING_LISTS = ['accounts', 'categories', 'jars', 'incomeSources'];
 const NOT_UNDONE = new Set(['theme', 'themeMotion', 'logView', 'updatedAt', ...SETTING_LISTS]);
 
 const WORDS = {
@@ -21,6 +21,7 @@ const WORDS = {
   'settings.accounts': ['account', 'accounts'],
   'settings.categories': ['category', 'categories'],
   'settings.jars': ['jar', 'jars'],
+  'settings.incomeSources': ['income source', 'income sources'],
 };
 
 const listOf = (state, key) => (key.startsWith('settings.') ? state.settings[key.slice(9)] : state[key]);

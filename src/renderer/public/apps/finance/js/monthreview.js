@@ -9,6 +9,7 @@ import { txInMonth, category, isWorkCost, budgetStatus } from './model.js';
 import { netWorthHistory } from './longview.js';
 import { roundUp50 } from './budgetsuggest.js';
 import { formatMoney } from './money.js';
+import { sourceTotals, sourceName, NONE } from './incomesources.js';
 
 const base = (t) => (Number.isInteger(t.base) ? t.base : t.amount);
 
@@ -61,7 +62,10 @@ export function monthReview(state, today) {
   } else if (rate != null && rate < 0) tip = { kind: 'deficit', text: 'You spent more than you earned. Pick one category to keep lower this month.' };
   else if (top && top.diff > 0 && top.before > 0) tip = { kind: 'rise', text: `${top.name} grew the most. Try to keep it near last month's level.` };
   else tip = { kind: 'ok', text: 'A steady month. Same again: log as you go.' };
-  return { key, label: monthLabel(key), name: monthLabel(key).split(' ')[0], spent: cur.spent, prevSpent: prev.count ? prev.spent : null, change, top, income: cur.income, rate, over, tip };
+  // Where the income came from (only when you use income sources): the biggest first.
+  const st = sourceTotals(state, `${key}-01`, `${key}-31`);
+  const sources = st.rows.some((x) => x.id !== NONE) ? st.rows.map((x) => ({ id: x.id, name: x.id === NONE ? 'No source' : sourceName(state, x.id), amount: x.amount })).slice(0, 4) : [];
+  return { key, label: monthLabel(key), sources, name: monthLabel(key).split(' ')[0], spent: cur.spent, prevSpent: prev.count ? prev.spent : null, change, top, income: cur.income, rate, over, tip };
 }
 
 // Dismissed per device (localStorage, never synced).

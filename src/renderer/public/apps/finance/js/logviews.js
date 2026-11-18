@@ -6,6 +6,7 @@ import { daysInMonth, weekday, todayISO, dowIndex, DOW_LONG, DOW_SHORT, MONTHS, 
 import { TYPE_LABEL } from './importer.js';
 import { B, category } from './model.js';
 import { countsAsSpending, countsAsIncome, signed, isNotCounted } from './catshare.js';
+import { tagHTML as sourceTag } from './incomesources.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const plain = (c) => formatMoney(c, '');
@@ -137,7 +138,7 @@ function cells(state, t, { who = true } = {}) {
   const isBaseCur = !t.currency || t.currency === state.settings.currency;
   return `<td class="c-date"><span class="dcell">${shown}<input type="date" class="dpick" data-col="date" value="${esc(t.date)}" aria-label="Date"></span></td>
     <td class="c-type">${typeSel}</td><td class="c-cat">${cat}</td>
-    <td class="c-note"><span class="note-cell">${ncTag}${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
+    <td class="c-note"><span class="note-cell">${sourceTag(state, t)}${ncTag}${loanBadge}<input type="text" data-col="note" value="${esc(t.note)}" placeholder="${isLoan ? 'Loan note' : 'What for?'}" aria-label="Note"></span></td>
     ${who ? `<td class="c-who">${isT ? '' : `<input type="text" data-col="person" list="people-list" value="${esc(state.people.find((p) => p.id === t.person)?.name || t.personName || '')}" placeholder="—" aria-label="Who" autocomplete="off">`}</td>` : ''}
     <td class="c-acc">${acc}</td>
     <td class="c-amt"><span class="amt-cell ${t.type}${isNotCounted(t) ? ' not-counted' : ''}"><span class="amt-sign" aria-hidden="true">${signPrefix}</span><input type="text" inputmode="decimal" class="amt" data-col="amount" value="${t.amount ? plain(t.amount) : ''}" placeholder="0" aria-label="Amount" autocomplete="off">${debtTag || (!isBaseCur ? `<span class="cur-tag">${esc(t.currency)}</span>` : `<span class="cur-tag cur-faint">${esc(state.settings.currency || 'MDL')}</span>`)}</span></td>`;

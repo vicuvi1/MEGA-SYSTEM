@@ -3,8 +3,9 @@
 // one Undo (history.js) puts every record back exactly as it was.
 
 import { touch, category, removeTx } from './model.js';
+import { canHaveSource, setTxSource, sourceById, NONE } from './incomesources.js';
 
-// kind: 'category' | 'date' | 'account'. `rateFor(cur)` gives a rate when a
+// kind: 'category' | 'date' | 'account' | 'source' (an income source id, or NONE to clear it; Earned records only). `rateFor(cur)` gives a rate when a
 // record moves to an account in another currency. Transfers are skipped for
 // category and account changes. Returns { changed, skipped }.
 export function applyBulk(state, ids, kind, value, { rateFor = () => null, now = Date.now() } = {}) {
@@ -14,6 +15,12 @@ export function applyBulk(state, ids, kind, value, { rateFor = () => null, now =
   if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return { changed, skipped };
   for (const t of state.tx) {
     if (!set.has(t.id)) continue;
+    if (kind === 'source') {
+      if (value !== NONE && !sourceById(state, value)) return { changed, skipped };
+      if (!canHaveSource(t)) { skipped++; continue; }
+      if (setTxSource(t, value === NONE ? null : value, now)) changed++;
+      continue;
+    }
     if (kind === 'date') t.date = value;
     else if (kind === 'income' || kind === 'spending') {
       // "Count as income / spending": yes puts the record back in the totals, no leaves it out.
@@ -43,6 +50,9 @@ export function applyBulk(state, ids, kind, value, { rateFor = () => null, now =
 // How many of the selected records a change would touch (for the confirm text).
 export function countApplicable(state, ids, kind, value) {
   const set = new Set(ids);
+  if (kind === 'source') {
+    return state.tx.filter((t) => set.has(t.id) && canHaveSource(t) && (value === NONE ? !!t.incomeSource : t.incomeSource !== value)).length;
+  }
   if (kind === 'income' || kind === 'spending') {
     const type = kind === 'income' ? 'income' : 'expense';
     const field = kind === 'income' ? 'notIncome' : 'notSpending';

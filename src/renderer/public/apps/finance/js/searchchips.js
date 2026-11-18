@@ -9,6 +9,8 @@ const PHRASE = [
   '(?:over|above|more\\s+than|under|below|less\\s+than)\\s+\\d[\\d.,]*',
   '(?:this|last|current)\\s+(?:month|year|week)',
   '[<>]=?\\s+\\d[\\d.,]*',
+  '(?:source|src):"[^"]+"',
+  '(?:source|src):\\S+(?:\\s+\\d{1,2}(?!\\S))?',
 ].join('|');
 const TERM_RE = new RegExp(`(?:${PHRASE})|\\S+`, 'gi');
 
@@ -33,6 +35,7 @@ export function queryTerms(query, state = null) {
     else if (/^\d+(?:[.,]\d+)?-\d+(?:[.,]\d+)?$/.test(t)) label = t.replace('-', '–');
     else if ((k = raw.match(/^(?:cat|category):(.+)$/i))) label = `Category: ${k[1]}`;
     else if ((k = raw.match(/^(?:acc|account):(.+)$/i))) label = `Account: ${k[1]}`;
+    else if ((k = raw.match(/^(?:source|src):"?(.+?)"?$/i))) label = `Source: ${k[1]}`;
     else if ((k = raw.match(/^(?:sub|subcategory):(.+)$/i))) label = `Subcategory: ${k[1]}`;
     else if ((k = raw.match(/^from:(.+)$/i))) label = `From ${k[1]}`;
     else if ((k = raw.match(/^to:(.+)$/i))) label = `Until ${k[1]}`;

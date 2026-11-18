@@ -1579,6 +1579,19 @@
    "notes": "finance js/catshare.js isNotCounted, js/notincome.js, js/bulk.js; fields notIncome / notSpending / notIncomeNo; sw cache v65."
   },
   {
+   "id": "money-income-sources",
+   "area": "money",
+   "title": "Income sources (Job 1, Job 2, ...)",
+   "user_visible_behavior": "Settings > Income sources: add, rename, recolour, pick an icon, reorder and archive your own tags for where money comes from, with optional currency, account, expected amount and pay day, and a confirm-each \"Create from your records\". Earned records get a Source picker (the last source for the same note or category is pre-filled), quick add understands @job2, the Log shows coloured source tags with a filter, source: search and a bulk \"Set source\" with Undo. Reports has \"Income by source\" (this month, 12 months of stacked bars, share and average per month, the records behind each source). Month review and Ask know sources; a source with a pay day and amount is watched for late or low income through the salary notification slot. Archived sources keep their history.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/moneyIncomeSources.test.ts",
+    "SMOKE_ONLY=\"Money income sources\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: moneyIncomeSources.test.ts (20 tests: totals with EUR and notIncome, @ parsing, suggestions, archive, bulk undo, search, Ask, salary watch with a pinned clock, sync), smoke step.",
+   "notes": "finance js/incomesources.js, screens/incomesources.js; settings.incomeSources + record field incomeSource; core/salaryNotice.ts tag/source/kind; sw cache v67."
+  },
+  {
    "id": "money-own-sidebar",
    "area": "money",
    "title": "Finance Helper keeps its own sidebar with the balance card inside Life",

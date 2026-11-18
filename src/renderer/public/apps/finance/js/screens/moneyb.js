@@ -9,7 +9,8 @@ import * as M from '../model.js';
 import { formatMoney, evalAmount, centsToPlain } from '../money.js';
 import { todayISO, monthKey } from '../dates.js';
 import { parseQuick, quickCategories } from '../quickadd.js';
-import { salaryStatus, salaryConfig } from '../salary.js';
+import { salaryStatus, salaryConfig, sourceAlerts } from '../salary.js';
+import { colorVar, sourceById } from '../incomesources.js';
 import { priceMemory } from '../prices.js';
 import { askMoney, CANT } from '../ask.js';
 import { shortDay } from '../safespend.js';
@@ -40,6 +41,7 @@ function previewHTML() {
     <span class="qa-amt" data-testid="qa-amount">${esc(shown)}</span>
     <label class="qa-cat"><span>Category <i>(${esc(LEVEL[r.level] || '')})</i></span><select id="qa-cat" data-testid="qa-cat" aria-label="Category">${catOpts}</select></label>
     <span data-testid="qa-account">${esc(accName)}</span>
+    ${r.sourceName ? `<span class="src-tag" data-testid="qa-source" style="--c:${colorVar(sourceById(ctx.state, r.source))}"><i aria-hidden="true"></i>${esc(r.sourceName)}</span>` : ''}
     <span data-testid="qa-note" class="qa-note">${r.note ? `“${esc(r.note)}”` : '<i>no note</i>'}</span>
     <button type="button" class="btn sm primary" data-mb="qa-save" data-testid="qa-save">Save</button></div>
     <div class="muted small">Enter saves · Tab or ↓ changes the category · Esc clears</div>`;
@@ -80,11 +82,31 @@ function saveQuick() {
 
 // ---------- Salary ----------
 
+function sourceCards(today) {
+  let out = '';
+  for (const w of sourceAlerts(ctx.state, today)) {
+    const f = (c) => formatMoney(c, ctx.state.settings.currency);
+    out += `<section class="card sal-card" data-testid="source-${w.status}" role="status"><h2>${w.status === 'late' ? `${esc(w.source.name)}: income not in yet (due ${esc(shortDay(w.payDate))})` : `${esc(w.source.name)}: lower than usual`}</h2>
+      <p class="muted small" style="margin:0 0 8px">${w.status === 'late' ? `Expected about ${esc(f(w.expected))} a month. Nothing is logged on this source yet.` : `Expected about ${esc(f(w.expected))} a month, so far ${esc(f(w.received))}.`}</p>
+      <button type="button" class="btn sm" data-mb="src-log" data-id="${esc(w.source.id)}" data-testid="source-log">Log it</button></section>`;
+  }
+  return out;
+}
+
+function logSource(id) {
+  const { state } = ctx;
+  const src = (state.settings.incomeSources || []).find((x) => x.id === id);
+  if (!src) return;
+  const acc = (src.account && M.account(state, src.account)) || M.account(state, M.defaultAccount(state, 'income', null));
+  const same = acc && (acc.currency || state.settings.currency) === (src.currency || state.settings.currency);
+  ctx.openTxSheet(null, { type: 'income', incomeSource: src.id, ...(acc ? { account: acc.id } : {}), ...(same && src.expected ? { amountText: centsToPlain(src.expected) } : {}) });
+}
+
 function salaryCards(today) {
   const st = salaryStatus(ctx.state, today);
-  if (!st) return '';
+  if (!st) return sourceCards(today);
   const base = ctx.state.settings.currency;
-  let out = '';
+  let out = sourceCards(today);
   if (st.late) {
     out += `<section class="card sal-card" data-testid="salary-late" role="status"><h2>Salary not in yet (due ${esc(shortDay(st.dueDate))})</h2>
       <p class="muted small" style="margin:0 0 8px">Expected about ${esc(formatMoney(st.cfg.amount, st.cfg.currency))}${st.accountName ? ` in ${esc(st.accountName)}` : ''}. Nothing like it is in your records yet.</p>
@@ -155,17 +177,36 @@ function onSalaryChange(el) {
 
 // One message to Life System (its notification budget) when the salary is late; once a month.
 const NOTIFIED = 'finance-helper.salary-notified';
+const NOTIFIED_SRC = 'finance-helper.source-notified';
 function tellLifeIfLate() {
   if (ctx.DEMO || ctx.state._sealed) return;
   const today = todayISO();
   const st = salaryStatus(ctx.state, today);
-  if (!st?.late) return;
   const month = monthKey(today);
-  try { if (localStorage.getItem(NOTIFIED) === month) return; } catch { /* no storage: Life keeps its own once-a-month guard */ }
   if (window.parent === window) return; // not inside Life System: the card is enough
+  let sent = false;
+  if (st?.late) {
+    let done = false;
+    try { done = localStorage.getItem(NOTIFIED) === month; } catch { /* no storage: Life keeps its own once-a-month guard */ }
+    if (!done) {
+      try {
+        window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_SALARY_LATE', payload: { month, due: st.dueDate } }, location.origin);
+        try { localStorage.setItem(NOTIFIED, month); } catch { /* ignore */ }
+        sent = true;
+      } catch { /* ignore */ }
+    }
+  }
+  // An income source that is late or lower than usual uses the same bell slot (one message a day, each source once a month).
+  if (sent) return;
+  let seen = [];
+  try { seen = JSON.parse(localStorage.getItem(NOTIFIED_SRC) || '[]'); } catch { /* ignore */ }
+  if (!Array.isArray(seen)) seen = [];
+  if (seen.includes(`day:${today}`)) return;
+  const w = sourceAlerts(ctx.state, today).find((x) => !seen.includes(`${month}:${x.source.id}`));
+  if (!w) return;
   try {
-    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_SALARY_LATE', payload: { month, due: st.dueDate } }, location.origin);
-    try { localStorage.setItem(NOTIFIED, month); } catch { /* ignore */ }
+    window.parent.postMessage({ type: 'LIFE_SYSTEM_BRIDGE', action: 'FINANCE_SALARY_LATE', payload: { month, due: w.payDate, tag: w.source.id, source: w.source.name, kind: w.status } }, location.origin);
+    try { localStorage.setItem(NOTIFIED_SRC, JSON.stringify([...seen.filter((k) => k.startsWith(month)), `${month}:${w.source.id}`, `day:${today}`].slice(-40))); } catch { /* ignore */ }
   } catch { /* ignore */ }
 }
 
@@ -278,6 +319,7 @@ export function init() {
     else if (a === 'ask') runAsk();
     else if (a === 'ask-log') openLog();
     else if (a === 'sal-log') logSalary();
+    else if (a === 'src-log') logSource(el.dataset.id);
   });
   // The salary check: once the app is up, then every hour.
   setTimeout(tellLifeIfLate, 4000);

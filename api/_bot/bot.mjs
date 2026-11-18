@@ -55633,7 +55633,8 @@ function readModules(raw) {
 	for (const m of MODULE_LIST) if (m.locked) out[m.id] = true;
 	return out;
 }
-var isOn = (m, id) => m[id] !== false;
+var isOn = (m, id) => id === "island" && true ? false : m[id] !== false;
+MODULE_LIST.filter((m) => m.id !== "island");
 /** The module a page belongs to; null for system pages (Settings, Connected apps, Telegram bots). */
 function pageModule(page) {
 	for (const m of MODULE_LIST) if (m.pages.includes(page)) return m.id;

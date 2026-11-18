@@ -59,6 +59,8 @@ import * as MoneyB from './screens/moneyb.js';
 import * as Changes from './changestore.js';
 import * as ChangesScreen from './screens/changes.js';
 import * as BudgetWarn from './screens/budgetwarn.js';
+import * as IncomeSources from './screens/incomesources.js';
+import * as IS from './incomesources.js';
 import { workText } from './workhours.js';
 import { planSplit, splitTransfers, splitPrefs, isSplit } from './split.js';
 import { openBankImport, rowsFromFile, decodeText } from './screens/bankimport.js';
@@ -587,7 +589,7 @@ function txRow(t, { showDate = false } = {}) {
     const recon = t.reconcile ? '<span class="pill" title="Settles a difference with your bank; not income or spending">Reconciliation</span> ' : '';
     const refundPill = isRefund(t) ? '<span class="pill" title="Money back for something you bought: it lowers spending, it is not income">Refund</span> ' : '';
     const notPill = isNotCounted(t) ? `<span class="pill not-counted" data-testid="not-counted-tag" title="The balance changed, but this is left out of ${t.type === 'income' ? 'income' : 'spending'} totals">${t.type === 'income' ? 'not income' : 'not spending'}</span> ` : '';
-    amount = `<span class="amount ${isNotCounted(t) ? 'not-counted' : t.type === 'income' ? 'income' : ''}">${fromRewards}${recon}${refundPill}${notPill}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
+    amount = `<span class="amount ${isNotCounted(t) ? 'not-counted' : t.type === 'income' ? 'income' : ''}">${IS.tagHTML(state, t)}${fromRewards}${recon}${refundPill}${notPill}${t.loan ? '<span class="pill">loan</span> ' : ''}${t.type === 'income' ? fm(t.amount, { sign: true }) : fm(-t.amount)}${ty ? `<small class="typed-as">${formatMoney(ty.amount, ty.currency)}</small>` : inLei}</span>`;
   }
   if (showDate) sub = `${dayLabel(t.date)} · ${sub}`;
   return `<button class="tx" data-act="edit" data-id="${esc(t.id)}">
@@ -1181,6 +1183,7 @@ function bulkBar() {
     <select data-bulk="account" aria-label="Set account"><option value="">Set account…</option>${accountOptionsHTML(state.settings.accounts.filter((a) => !a.archived), '', { baseCur: state.settings.currency })}</select>
     ${list.some((t) => t.type === 'income' && !t.loan) ? '<select data-bulk="income" data-testid="bulk-income" aria-label="Count as income"><option value="">Count as income…</option><option value="yes">Count as income: yes</option><option value="no">Count as income: no</option></select>' : ''}
     ${list.some((t) => t.type === 'expense' && !t.loan) ? '<select data-bulk="spending" data-testid="bulk-spending" aria-label="Count as spending"><option value="">Count as spending…</option><option value="yes">Count as spending: yes</option><option value="no">Count as spending: no</option></select>' : ''}
+    ${list.some((t) => IS.canHaveSource(t)) && IS.hasSources(state) ? `<select data-bulk="source" data-testid="bulk-source" aria-label="Set source"><option value="">Set source…</option>${IS.activeSources(state).map((s) => `<option value="${esc(s.id)}">${esc(`${s.emoji || ''} ${s.name}`.trim())}</option>`).join('')}<option value="${IS.NONE}">No source</option></select>` : ''}
     ${Taxes.bulkSelectHTML()}
     <label class="bulk-date"><span>Set date</span><input type="date" data-bulk="date" aria-label="Set date"></label>
     <button type="button" class="btn" data-act="bulk-all" data-testid="bulk-all">Select all shown</button>
@@ -1259,7 +1262,7 @@ function runBulk(kind, v, ids) {
   closeSheet();
   if (!changed) { toast(skipped ? 'None of the selected records can take that (moves, or a different type)' : 'Nothing changed'); return; }
   commit();
-  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting' }[kind];
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting', source: 'income source' }[kind];
   toast(`Changed the ${what} of ${plural(changed)}${skipped ? ` (${skipped} skipped)` : ''}`, 'Undo', () => undoRedo(-1));
 }
 
@@ -1273,7 +1276,12 @@ function onBulkChange(el) {
   if (kind === 'date' && !/^\d{4}-\d{2}-\d{2}$/.test(v)) return;
   const n = kind === 'tax' ? ids.length : Bulk.countApplicable(state, ids, kind, v);
   if (!n) { toast('None of the selected records can take that (moves, or a different type)'); return; }
-  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting' }[kind];
+  const what = { category: 'category', account: 'account', date: 'date', tax: 'tax tag', income: 'income setting', spending: 'spending setting', source: 'income source' }[kind];
+  if (kind === 'source') {
+    const none = v === IS.NONE;
+    confirmBulk({ title: 'Set source', text: none ? `Take the income source off ${plural(n)}? One Undo puts it back.` : `Set the source of ${plural(n)} to ${label}? Only Earned records change. One Undo puts every record back exactly as it was.`, ok: none ? `Clear ${plural(n)}` : `Set ${plural(n)}`, onOk: () => runBulk(kind, v, ids) });
+    return;
+  }
   if (kind === 'income' || kind === 'spending') {
     const w = kind === 'income' ? 'income' : 'spending';
     const text = v === 'no' ? `Leave ${plural(n)} out of ${w}? The money still counts in the account balances. One Undo puts it back.` : `Count ${plural(n)} as ${w} again? One Undo puts it back.`;
@@ -1410,6 +1418,7 @@ function filterPanel() {
       <select id="fp-cat" aria-label="Category">${opts(cats, 'Any category')}</select>
       <select id="fp-acc" aria-label="Account">${opts(accs, 'Any account')}</select>
       ${tags.length ? `<select id="fp-tag" aria-label="Tag">${opts(tags, 'Any tag')}</select>` : ''}
+      ${IS.hasSources(state) ? `<select id="fp-src" aria-label="Income source">${opts(IS.sourcesOf(state).map((x) => [x.name, x.name]), 'Any source')}</select>` : ''}
       <label class="fp-date"><span>From</span><input id="fp-from" type="date"></label>
       <label class="fp-date"><span>To</span><input id="fp-to" type="date"></label>
       <input id="fp-min" type="text" inputmode="decimal" placeholder="More than" aria-label="More than (amount)">
@@ -1508,6 +1517,7 @@ function viewLog() {
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q=">1000">&gt; 1 000</button>
         <button type="button" class="lq-chip" data-act="log-quick-search" data-q="50-200">50–200</button>
         ${M.allTags(state).slice(0, 4).map((g) => `<button type="button" class="lq-chip" data-act="log-quick-search" data-q="#${esc(g.tag)}">#${esc(g.tag)}</button>`).join('')}
+        ${IS.activeSources(state).slice(0, 6).map((x) => `<button type="button" class="lq-chip src-lq" data-act="log-quick-search" data-testid="src-filter" data-q="${esc(`source:"${x.name}"`)}" style="--c:${IS.colorVar(x)}"><i aria-hidden="true"></i>${esc(x.name)}</button>`).join('')}
         ${savedFilters(state).map((f) => `<span class="lq-saved"><button type="button" class="lq-chip saved" data-act="log-quick-search" data-q="${esc(f.q)}" title="${esc(f.q)}">☆ ${esc(f.name)}</button><button type="button" class="lq-x" data-act="filter-forget" data-q="${esc(f.q)}" aria-label="Forget the saved filter ${esc(f.name)}">✕</button></span>`).join('')}
         ${q && !savedFilters(state).some((f) => f.q === ui.search.trim()) ? '<button type="button" class="lq-chip" data-act="filter-save">☆ Save this search</button>' : ''}
         ${q ? `<button type="button" class="lq-chip lq-clear" data-act="log-clear-search">✕ Clear search</button>` : ''}
@@ -1679,6 +1689,7 @@ function viewSettings() {
     { id: 'general', icon: '⚙️', label: 'General', sub: 'Look, spending limit, pay yourself', desc: 'How the app looks, your monthly spending limit, paying yourself a salary, the jar split and what an hour of your work is worth.', html: () => cards.look + limitSettingsCard() + spendSettingsCard() + paySettingsCard() + MoneyB.settingsCard() + cards.split + WorkHour.settingsCard() + cards.accounts + cards.goals + CashCount.settingsCard() + Money3.settingsCard() + Shortcuts.settingsCard() },
     { id: 'extras', icon: '✨', label: 'Extras', sub: 'Music, sounds, wallpapers', desc: 'Moving backgrounds, wallpapers, button sounds and focus music. All optional, all off to start.', html: () => cards.extras },
     { id: 'categories', icon: '🏷️', label: 'Categories & rules', sub: 'Categories, jars, auto-rules', desc: 'Your categories, which jar each one fills, and rules that sort records for you.', html: () => cards.categories + Cats.editorCard() + Rules.settingsCard() + BudgetWarn.settingsCard() },
+    { id: 'sources', icon: '💼', label: 'Income sources', sub: 'Job 1, Job 2, clients', desc: 'Your own tags for where money comes from. Pick one when you log income, and see each one in Reports.', html: () => IncomeSources.settingsCard() },
     { id: 'data', icon: '💾', label: 'Data & backups', sub: 'Import, export, backups, sync', desc: 'Where your data lives, automatic backups, sync between devices and Excel import.', html: () => cards.data + ChangesScreen.settingsCard() + Backups.settingsCard() + Sync.settingsCard() },
     { id: 'connect', icon: '🔗', label: 'Telegram & Binance', sub: 'Your bot, crypto balances', desc: 'Your own Telegram bot for logging from your phone, and Binance balances (read-only).', html: () => Telegram.settingsCard() + TgBlocks.settingsCard() + Binance.settingsCard() },
     { id: 'buddy', icon: '🤖', label: 'Bit, your buddy', sub: 'Show, name, color', desc: 'Bit, the little robot that cheers you on: show or hide it, its name and color.', html: () => Buddy.settingsCard() },
@@ -1912,6 +1923,16 @@ function openTxSheet(existing = null, preset = {}) {
   let subOpen = false;
   let addingSub = false;
   if (!existing) draft.sub = preset.sub || null;
+  // Income source (js/incomesources.js): the one you used last for this note or category is pre-filled until you pick.
+  let srcTouched = !!existing || !!preset.incomeSource;
+  let addingSrc = false;
+  if (!existing && !draft.incomeSource) draft.incomeSource = null;
+  const srcShown = () => draft.type === 'income' && !draft.refund && !draft.loan;
+  const reSrc = () => {
+    if (srcTouched || !srcShown()) return;
+    draft.incomeSource = IS.rememberedSource(state, { category: draft.category, note: draft.note });
+  };
+  if (!existing && draft.type === 'income') reSrc();
   const guessSub = () => (draft.type === 'expense' ? T.suggestSub(state, draft.note, { category: draft.category })?.sub || null : null);
   // After the note or category changed (unless you picked one yourself). A
   // new record takes the guess (shown as "Is this …?"); an old one only
@@ -1978,6 +1999,15 @@ function openTxSheet(existing = null, preset = {}) {
       ${addingSub ? `<span class="cat-new"><input id="new-sub" type="text" placeholder="New subcategory" aria-label="New subcategory name"><button type="button" class="btn primary" data-act="sub-create">Add</button></span>` : `<button type="button" class="sub-chip sub-add" data-act="sub-new">+ New</button>`}</div>` : '';
     return `<div class="sub-row">${guessLine}${list}</div>`;
   };
+  const paintSrc = (sheet) => {
+    const wrap = sheet.querySelector('#src-row-wrap');
+    if (wrap) wrap.innerHTML = srcShown() ? IncomeSources.pickerHTML(state, { selected: draft.incomeSource, adding: addingSrc }) : '';
+    const box = sheet.querySelector('#new-src');
+    if (box) {
+      box.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sheet.querySelector('[data-act="src-form-create"]').click(); } });
+      box.focus();
+    }
+  };
   const paintSub = (sheet) => {
     const wrap = sheet.querySelector('#sub-row-wrap');
     if (wrap) wrap.innerHTML = subRow();
@@ -2012,7 +2042,8 @@ function openTxSheet(existing = null, preset = {}) {
       ${(() => { const tags = M.allTags(state).slice(0, 8); return `<div class="tag-picks" role="group" aria-label="Tags">${tags.map((g) => `<button type="button" class="tag-pick" data-tag="${esc(g.tag)}" aria-pressed="${M.tagsOf(draft.note).includes(g.tag)}">#${esc(g.tag)}</button>`).join('')}<span class="muted small">${tags.length ? 'Tap a tag, or' : 'Tags:'} type #trip in the note</span></div>`; })()}
       ${isT ? '' : `<div class="cats" role="group" aria-label="Category">${categoryOrder(catType()).map((c) => `<button type="button" class="cat" data-cat="${esc(c.id)}" aria-pressed="${draft.category === c.id}">${catChipIcon(c)}<span>${esc(c.name)}</span></button>`).join('')}
         ${addingCat ? `<span class="cat-new"><input id="new-cat" type="text" placeholder="New category" aria-label="New category name"><button type="button" class="btn primary" data-act="cat-create">Add</button></span>` : '<button type="button" class="cat cat-add" data-act="cat-new">+ New</button>'}</div>
-        <div id="sub-row-wrap">${subRow()}</div>`}
+        <div id="sub-row-wrap">${subRow()}</div>
+        <div id="src-row-wrap">${srcShown() ? IncomeSources.pickerHTML(state, { selected: draft.incomeSource, adding: addingSrc }) : ''}</div>`}
       ${isT ? '' : `<div class="row2">
         <label class="field"><span>${draft.type === 'income' ? 'From who? (optional)' : 'To who? (optional)'}</span><input id="tx-person" type="text" list="people-list" autocomplete="off" value="${esc(draft.personName)}" placeholder="Name"></label>
         <label class="field check"><input id="tx-loan" type="checkbox" ${draft.loan ? 'checked' : ''}><span>${draft.type === 'income' ? 'Borrowed: I pay it back' : 'Lent: they pay it back'}</span></label>
@@ -2159,11 +2190,14 @@ function openTxSheet(existing = null, preset = {}) {
       reguess();
       paintSub(sheet);
       if (draft.category && draft.category !== before) followCategory(sheet);
+      const srcBefore = draft.incomeSource;
+      reSrc();
+      if (draft.incomeSource !== srcBefore) paintSrc(sheet);
     });
     sheet.querySelector('#tx-refund')?.addEventListener('change', () => {
       // The category list switches between income and expense categories.
       readInputs(sheet);
-      if (draft.refund) draft.notIncome = false;
+      if (draft.refund) { draft.notIncome = false; draft.incomeSource = null; }
       draft.category = M.suggestCategory(state, draft.note, catType());
       catTouched = false;
       subTouched = false;
@@ -2234,6 +2268,7 @@ function openTxSheet(existing = null, preset = {}) {
         ...(personId && draft.loan && !draft.refund ? { loan: true } : {}),
         ...(draft.type === 'income' && draft.refund && !draft.loan ? { refund: true } : {}),
         ...(draft.type === 'income' && draft.notIncome && !draft.refund && !draft.loan ? { notIncome: true } : {}),
+        ...(draft.type === 'income' && !draft.refund && !(personId && draft.loan) && draft.incomeSource && IS.sourceById(state, draft.incomeSource) ? { incomeSource: draft.incomeSource } : {}),
         ...(draft.type === 'expense' && draft.notSpending && !draft.loan ? { notSpending: true } : {}),
       };
     }
@@ -2289,15 +2324,50 @@ function openTxSheet(existing = null, preset = {}) {
           if (draft.type !== 'income') draft.refund = false;
           draft.notIncome = false;
           draft.notSpending = false;
+          if (draft.type !== 'income') draft.incomeSource = null;
+          addingSrc = false;
           draft.category = catTouched ? null : M.suggestCategory(state, draft.note, catType());
           catTouched = false;
           addingCat = false;
           subTouched = false;
           draft.sub = null;
           reguess();
+          if (draft.type === 'income') reSrc();
           if (!accTouched && draft.type !== 'transfer') draft.account = M.defaultAccount(state, draft.type, draft.category);
           paint(sheet);
         }
+        return;
+      }
+      const srcBtn = e.target.closest('.src-chip[data-src]');
+      if (srcBtn) {
+        draft.incomeSource = draft.incomeSource === srcBtn.dataset.src ? null : srcBtn.dataset.src;
+        srcTouched = true;
+        // A source's usual account is used until you pick an account yourself.
+        const usual = draft.incomeSource && IS.sourceById(state, draft.incomeSource)?.account;
+        if (usual && !accTouched && usual !== draft.account && M.account(state, usual) && !M.account(state, usual).archived) {
+          readInputs(sheet);
+          draft.account = usual;
+          rateText = '';
+          paint(sheet, false);
+          updateHint(sheet);
+        } else paintSrc(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="src-form-new"]')) {
+        addingSrc = true;
+        paintSrc(sheet);
+        return;
+      }
+      if (e.target.closest('[data-act="src-form-create"]')) {
+        const r = IS.addSource(state, { name: sheet.querySelector('#new-src')?.value });
+        if (r.ok || (r.error === 'exists' && !r.source.archived)) {
+          draft.incomeSource = r.source.id;
+          srcTouched = true;
+          addingSrc = false;
+          if (r.ok) persist();
+        } else if (r.error === 'exists') toast(`"${r.source.name}" is archived. Bring it back in Settings → Income sources.`);
+        else toast('Give the source a name');
+        paintSrc(sheet);
         return;
       }
       if (e.target.closest('[data-act="cat-new"]')) {
@@ -2378,6 +2448,9 @@ function openTxSheet(existing = null, preset = {}) {
         reguess();
         paintSub(sheet);
         followCategory(sheet);
+        const srcWas = draft.incomeSource;
+        reSrc();
+        if (draft.incomeSource !== srcWas) paintSrc(sheet);
         return;
       }
       const pick = e.target.closest('[data-pick]');
@@ -2392,6 +2465,9 @@ function openTxSheet(existing = null, preset = {}) {
         entryCur = null; // quick picks are in the account's currency
         catTouched = true;
         reguess();
+        srcTouched = false;
+        draft.incomeSource = null;
+        reSrc();
         paint(sheet, false);
         const a = sheet.querySelector('#tx-amount');
         a.focus();
@@ -3367,6 +3443,7 @@ document.addEventListener('click', (e) => {
     if (v('fp-cat')) parts.push(`cat:${v('fp-cat')}`);
     if (v('fp-acc')) parts.push(`acc:${v('fp-acc')}`);
     if (v('fp-tag')) parts.push(`#${v('fp-tag')}`);
+    if (v('fp-src')) parts.push(`source:"${v('fp-src')}"`);
     if (v('fp-from')) parts.push(`from:${v('fp-from')}`);
     if (v('fp-to')) parts.push(`to:${v('fp-to')}`);
     if (v('fp-min')) parts.push(`>${v('fp-min').replace(/\s/g, '')}`);
@@ -3646,7 +3723,7 @@ const SCREENS = {
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
-  settings: { view: viewSettings, onClick: (a, el) => Security.onClick(a, el) || Cats.onClick(a, el) || Rules.onClick(a, el) || Telegram.onClick(a) || TgBlocks.onClick(a, el) || Buddy.onClick(a, el) || Binance.onClick(a) || Sync.onClick(a) || SelfCheck.onClick(a) || Backups.onClick(a, el) || (a.startsWith('update-') && (Updates.onClick(a), true)), onChange: (el) => Security.onChange(el) || Cats.onChange(el) || Telegram.onChange(el) || Buddy.onChange(el) || WorkHour.onChange(el) },
+  settings: { view: viewSettings, onClick: (a, el) => IncomeSources.onClick(a, el) || Security.onClick(a, el) || Cats.onClick(a, el) || Rules.onClick(a, el) || Telegram.onClick(a) || TgBlocks.onClick(a, el) || Buddy.onClick(a, el) || Binance.onClick(a) || Sync.onClick(a) || SelfCheck.onClick(a) || Backups.onClick(a, el) || (a.startsWith('update-') && (Updates.onClick(a), true)), onChange: (el) => Security.onChange(el) || Cats.onChange(el) || Telegram.onChange(el) || Buddy.onChange(el) || WorkHour.onChange(el) },
 };
 
 function openMoreSheet() {

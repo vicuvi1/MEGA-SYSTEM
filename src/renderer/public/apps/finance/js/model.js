@@ -1241,7 +1241,7 @@ export function applyRule(state, rule, list = ruleTargets(state, rule), now = Da
 // Fields the add/edit sheet sets (or clears) itself. Every other field on a
 // record (source, confirmedAt, catBy, book, reconcile, moved, a newer app's
 // own…) is kept as it was when the record is edited.
-const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts', 'refund', 'notIncome', 'notSpending']);
+const FORM_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'type', 'amount', 'currency', 'date', 'note', 'from', 'to', 'toAmount', 'rate', 'base', 'account', 'category', 'sub', 'orig', 'debt', 'person', 'loan', 'recurring', 'tax', 'receipts', 'refund', 'notIncome', 'notSpending', 'incomeSource']);
 export function keptOnEdit(existing, tx) {
   const out = {};
   for (const [k, v] of Object.entries(existing || {})) if (!FORM_FIELDS.has(k) && !(k in tx)) out[k] = v;

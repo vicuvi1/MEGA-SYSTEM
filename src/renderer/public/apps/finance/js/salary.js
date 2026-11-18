@@ -10,6 +10,7 @@ import { addDays, daysInMonth, monthKey } from './dates.js';
 import { countsAsIncome } from './catshare.js';
 import { rateToBase } from './fx.js';
 import { invoiceHours } from './invoices.js';
+import { activeSources } from './incomesources.js';
 
 export const GRACE_DAYS = 2;
 export const TOLERANCE = 0.2;
@@ -69,3 +70,39 @@ export function salaryStatus(state, today) {
   }
   return { cfg, payDate, dueDate: payDate, late, received, hourly, accountName: cfg.account ? account(state, cfg.account)?.name || '' : '' };
 }
+
+// ---------- Salary watch per income source ----------
+// A source with a pay day and an expected amount per month (Settings → Income
+// sources) is watched like the salary: when pay day + 2 days has passed and
+// nothing came in for it ("late"), or what came in is more than 20% under the
+// expected amount ("low"). Only money logged on that source counts. Archived
+// sources are not watched. Same grace days and tolerance as the salary.
+
+/**
+ * @returns {Array<{ source, payDate, expected: number, received: number, status: 'late'|'low'|'ok'|'waiting' }>}
+ * `expected` and `received` are in your main currency. A source whose currency has no known rate is skipped.
+ */
+export function sourceWatch(state, today) {
+  const key = monthKey(today);
+  const out = [];
+  for (const source of activeSources(state)) {
+    if (!(source.expected > 0) || !(source.payday >= 1 && source.payday <= 31)) continue;
+    const cur = source.currency || state.settings.currency || 'MDL';
+    const r = rateToBase(state, cur);
+    if (!(r > 0)) continue;
+    const expected = Math.round(source.expected * r);
+    const payDate = clampDay(key, source.payday);
+    const from = addDays(payDate, -10);
+    const got = state.tx.filter((t) => countsAsIncome(t) && t.incomeSource === source.id && t.date >= from && t.date <= today);
+    const received = got.reduce((a, t) => a + B(t), 0);
+    const past = today > addDays(payDate, GRACE_DAYS);
+    let status = 'ok';
+    if (!got.length) status = past ? 'late' : 'waiting';
+    else if (past && received < expected * (1 - TOLERANCE)) status = 'low';
+    out.push({ source, payDate, expected, received, status });
+  }
+  return out;
+}
+
+/** The sources to warn about today (late or low). */
+export const sourceAlerts = (state, today) => sourceWatch(state, today).filter((w) => w.status === 'late' || w.status === 'low');

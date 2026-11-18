@@ -19,6 +19,8 @@ import { workbook } from '../xlsx.js';
 import { parseQuery, searchTx, relRange } from '../search.js';
 import { catIcon, subColor } from './categories.js';
 import * as Spending from './spending.js';
+import * as IncomeSources from './incomesources.js';
+import * as IS from '../incomesources.js';
 import { countsAsSpending, signed, isRefund } from '../catshare.js';
 
 const PRESETS = [
@@ -320,15 +322,17 @@ export function view() {
     </section>
   </div>
 
+  ${IncomeSources.reportCard(today)}
+
   <div class="rep-row-tables">
     <div class="rep-col-left">
       <div class="rep-sub-grid">
         <section class="card">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
-            <h2 style="margin:0;">Income by source</h2>
+            <h2 style="margin:0;">Income by category</h2>
             <b class="income">${money(r.income)}</b>
           </div>
-          ${table(['Source', 'Earned', 'Share', 'Records'], r.sources.rows.map((x) => {
+          ${table(['Category', 'Earned', 'Share', 'Records'], r.sources.rows.map((x) => {
             const sharePct = Math.round(x.share * 100);
             const c = M.category(state, x.id);
             return `<tr class="click" data-act="rep-cat" data-cat="${esc(x.id)}" data-type="income">
@@ -418,6 +422,7 @@ function exportReport() {
   const cat = (id) => M.category(state, id)?.name || 'Unknown';
   const expenses = r.list.filter((t) => countsAsSpending(t));
   const subRows = T.totalsAllSubs(state, expenses);
+  const srcTot = IS.sourceTotals(state, r0.from, r0.to);
   const sheets = [
     { name: 'Summary', header: false, cols: [24, 18, 18], rows: [
       [{ v: `Report ${r0.label}`, bold: true }], [`${r0.from} to ${r0.to}`], [],
@@ -430,6 +435,7 @@ function exportReport() {
     { name: 'Categories', cols: [26, 16, 10, 10], rows: [['Category', `Spent (${b})`, 'Share', 'Records'], ...r.spending.rows.map((x) => [cat(x.id), v(x.amount), `${Math.round(x.share * 100)}%`, x.count])], filterRows: r.spending.rows.length },
     { name: 'Subcategories', cols: [22, 24, 16, 10, 10], rows: [['Category', 'Subcategory', `Spent (${b})`, 'Share', 'Records'], ...subRows.map((x) => [cat(x.parent), x.sub ? x.sub.name : '(none)', v(x.amount), r.expense ? `${Math.round((x.amount / r.expense) * 100)}%` : '', x.count])], filterRows: subRows.length },
     { name: 'Income sources', cols: [26, 16, 10, 10], rows: [['Source', `Earned (${b})`, 'Share', 'Records'], ...r.sources.rows.map((x) => [cat(x.id), v(x.amount), `${Math.round(x.share * 100)}%`, x.count])] },
+    ...(srcTot.rows.some((x) => x.id !== IS.NONE) ? [{ name: 'Income by source', cols: [26, 16, 10, 10], rows: [['Source', `Earned (${b})`, 'Share', 'Records'], ...srcTot.rows.map((x) => [x.id === IS.NONE ? 'No source' : IS.sourceName(state, x.id), v(x.amount), `${Math.round(x.share * 100)}%`, x.count])] }] : []),
     { name: 'People', cols: [24, 16, 16, 10], rows: [['Person', `Received (${b})`, `Given (${b})`, 'Records'], ...r.byPerson.map((x) => [M.person(state, x.id)?.name || '', v(x.income), v(x.expense), x.count])] },
   ];
   ctx.download(`finance-report-${r0.from}_${r0.to}.xlsx`, workbook(sheets), 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
@@ -458,6 +464,7 @@ function drill(el) {
 }
 
 export function onClick(act, el) {
+  if (IncomeSources.onClick(act, el)) return true;
   if (act === 'rep-preset') {
     rs.preset = el.dataset.preset;
     if (rs.q && relRange(parseQuery(rs.q).rel, todayISO())) rs.q = '';

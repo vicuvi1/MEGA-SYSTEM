@@ -8,6 +8,7 @@
 //   spent  earned  moves        a type
 //   #trip                       a tag in the note
 //   cat:food  acc:cash          a category or account (name or id, start of it)
+//   source:"Job 2"            an income source (name or start of it, spaces optional)
 //   sub:coffee                  a subcategory (name, start of it)
 //   this year  last month       a period (also "this week"); "all", "my" are ignored
 //   from:2026-01-01 to:2026-01-31   a date range (or 2026-01-01..2026-01-31)
@@ -71,6 +72,8 @@ const monthNo = (w) => MONTH_WORDS.findIndex((names) => names.includes(w)) + 1;
 const OVER_RE = /\b(?:over|above|more than|peste)\s+(?=\d)/g;
 const UNDER_RE = /\b(?:under|below|less than|sub)\s+(?=\d)/g;
 const RANGE_RE = new RegExp(`\\bfrom\\s+(\\d{1,2})\\s+(${MON_RE})(?:\\s+(\\d{4}))?\\s+(?:to|until|-)\\s+(\\d{1,2})\\s+(${MON_RE})(?:\\s+(\\d{4}))?`, 'g');
+// source:"Job 2"  |  source:job2  |  source:Job 2 (a short number after the name belongs to it)
+const SOURCE_RE = /\b(?:source|src):(?:"([^"]+)"|(\S+?(?:\s+\d{1,2}(?!\S))?)(?=\s|$))/gu;
 const iso = (y, m, d) => `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 
 // "from 1 oct to 15 oct" (year optional: this year, or last year if that would be in the future) -> { from, to }.
@@ -88,12 +91,14 @@ export function wordRange(m, today) {
 }
 
 export function parseQuery(q, today) {
-  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], subs: [], accs: [], from: null, to: null, rel: null };
+  const out = { words: [], min: null, max: null, exact: null, months: [], year: null, day: null, type: null, tags: [], cats: [], subs: [], accs: [], sources: [], from: null, to: null, rel: null };
   // Join "1 000" into "1000", "> 1000" into ">1000", "100 - 500" into "100-500".
   let text = fold(q).replace(/(\d)[\s\u00a0](?=\d{3}(?!\d))/g, '$1').replace(/([<>]=?)\s+(?=\d)/g, '$1').replace(/(\d)\s*-\s*(\d)/g, '$1-$2').trim();
   // "this year", "last month", "anul acesta", "в этом году": a period from today.
   text = text.replace(RANGE_RE, (...m) => { const r = wordRange(m, today); out.from = r.from; out.to = r.to; return ' '; });
   text = text.replace(OVER_RE, '>').replace(UNDER_RE, '<');
+  // "source:Job 2", source:"Job 2" or source:job2 (the name with or without spaces): an income source.
+  text = text.replace(SOURCE_RE, (...m) => { out.sources.push(String(m[1] ?? m[2] ?? '').replace(/[^\p{L}\p{N}]/gu, '')); return ' '; });
   for (const [re, rel] of REL_WORDS) text = text.replace(re, () => { out.rel = rel; return ' '; });
   for (const tok of text.split(/\s+/).filter(Boolean)) {
     let m;
@@ -162,6 +167,7 @@ function haystack(state, t) {
     if (a) parts.push(a.name, a.bank);
   }
   if (t.person) parts.push(name(state.people, t.person)?.name);
+  if (t.incomeSource) parts.push(name(state.settings.incomeSources || [], t.incomeSource)?.name);
   return fold(parts.filter(Boolean).join(' '));
 }
 
@@ -185,6 +191,11 @@ export function searchTx(state, query, today) {
     if (q.subs?.length) {
       const sub = t.sub && (state.settings.subcats || []).find((x) => x.id === t.sub && x.parent === t.category);
       if (!sub || !q.subs.some((w) => fold(sub.name).startsWith(w) || fold(sub.name).split(/[\s&]+/).some((p) => p.startsWith(w)))) return false;
+    }
+    if (q.sources?.length) {
+      const own = t.incomeSource && (state.settings.incomeSources || []).find((s) => s.id === t.incomeSource);
+      const nm = own ? fold(own.name).replace(/[^\p{L}\p{N}]/gu, '') : '';
+      if (!nm || !q.sources.some((w) => w && nm.startsWith(w))) return false;
     }
     if (q.accs?.length) {
       const accs = [t.account, t.from, t.to].filter(Boolean).map((id) => state.settings.accounts.find((a) => a.id === id)).filter(Boolean);

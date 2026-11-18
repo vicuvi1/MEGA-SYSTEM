@@ -1186,6 +1186,8 @@ try {
   await (await import('./smokeMoneyB1.mjs')).moneyB1Steps({ step, pg, open, financeFrame })
   // "Doesn't count as income": the Not income? suggestion, totals and Undo (e2e/smokeMoneyNotIncome.mjs).
   await (await import('./smokeMoneyNotIncome.mjs')).moneyNotIncomeSteps({ step, pg, open, financeFrame })
+  // Income sources: create Job 1 / Job 2, log income to them, Reports totals, archive (e2e/smokeMoneyIncomeSources.mjs).
+  await (await import('./smokeMoneyIncomeSources.mjs')).moneyIncomeSourcesSteps({ step, pg, open, financeFrame })
   // Money ideas: the money calendar, "Can I afford it?" and the wishlist with a wait (e2e/smokeMoneyIdeas.mjs).
   await (await import('./smokeMoneyIdeas.mjs')).moneyIdeasSteps({ step, pg, open, financeFrame, storedTx })
 

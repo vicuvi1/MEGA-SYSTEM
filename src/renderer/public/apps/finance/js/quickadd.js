@@ -8,6 +8,7 @@ import * as M from './model.js';
 import { suggest } from './learn.js';
 import { evalAmount } from './money.js';
 import { pairRate, rateToBase } from './fx.js';
+import { findSourceByName, rememberedSource, sourceName, hasSources } from './incomesources.js';
 
 const fold = (s) => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
 const CUR_WORDS = { usd: 'USD', eur: 'EUR', mdl: 'MDL', lei: 'MDL', leu: 'MDL', ron: 'RON', gbp: 'GBP', uah: 'UAH', rub: 'RUB', dollar: 'USD', dollars: 'USD', euro: 'EUR', euros: 'EUR' };
@@ -47,7 +48,9 @@ export function parseQuick(state, text, { catOverride = null, today } = {}) {
   let typedCur = null;
   const amounts = [];
   const words = [];
+  const at = []; // "@job2": an income source
   for (let tok of toks) {
+    if (/^@[^\s@]+$/.test(tok)) { at.push(tok); words.push(tok); continue; }
     if (tok === '+') { income = true; continue; }
     // "$45", "45$", "€12", "12eur"
     let m;
@@ -79,6 +82,16 @@ export function parseQuick(state, text, { catOverride = null, today } = {}) {
   if (income && refund) return { ok: false, missing: 'Pick one: income (+) or a refund (−).', kind: null };
   const kind = refund ? 'refund' : income ? 'income' : 'expense';
   const catType = kind === 'income' ? 'income' : 'expense';
+
+  // "@job2" names an income source (Earned only); anywhere else it stays in the note.
+  let source = null;
+  if (kind === 'income' && at.length) {
+    if (at.length > 1) return { ok: false, missing: 'Pick one source: type only one @name.', kind };
+    source = findSourceByName(state, at[0]);
+    if (!source) return { ok: false, missing: hasSources(state) ? `No income source called "${at[0]}". Create it in Settings → Income sources, or check the spelling.` : `No income source called "${at[0]}" yet. Create it in Settings → Income sources.`, kind };
+    const i = words.indexOf(at[0]);
+    if (i >= 0) words.splice(i, 1);
+  }
 
   // An account named in the text ("card", "wallet"): its word leaves the note.
   const accounts = (M.activeAccounts(state).length ? M.activeAccounts(state) : state.settings.accounts);
@@ -120,6 +133,8 @@ export function parseQuick(state, text, { catOverride = null, today } = {}) {
   const rate = rateToBase(state, accCur);
   if (!(rate > 0)) return { ok: false, missing: `No exchange rate for ${accCur} yet (Accounts → Rates).`, kind, amount, currency: want };
   const entry = M.entryAmounts(amount, want, accCur, er);
+  // No @name typed: the source you used last for this note or category.
+  const sourceId = source ? source.id : kind === 'income' ? rememberedSource(state, { category: finalCat, note }) : null;
   const tx = {
     type: kind === 'expense' ? 'expense' : 'income',
     amount: entry.amount,
@@ -132,8 +147,9 @@ export function parseQuick(state, text, { catOverride = null, today } = {}) {
     base: Math.round(entry.amount * rate),
     ...(entry.orig ? { orig: entry.orig } : {}),
     ...(kind === 'refund' ? { refund: true } : {}),
+    ...(sourceId ? { incomeSource: sourceId } : {}),
     // A guess you did not pick is not your choice: the app must not learn from itself.
     ...(level === 'guess' || level === 'none' || level === 'name' ? { catBy: 'auto' } : {}),
   };
-  return { ok: true, missing: null, kind, amount, currency: want, category: finalCat, level, account: acc.id, note, tx };
+  return { ok: true, missing: null, kind, amount, currency: want, category: finalCat, level, account: acc.id, note, source: sourceId, sourceName: sourceId ? sourceName(state, sourceId) : '', tx };
 }

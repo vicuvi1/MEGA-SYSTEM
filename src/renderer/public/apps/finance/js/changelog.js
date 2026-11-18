@@ -27,7 +27,7 @@ export const MAX_STEP = 500;
 export const MAX_SYNC_STEP = 200;
 
 /** The lists that are logged (settings scalars and the daily net-worth snapshots are not records you edit). */
-export const LOGGED = ['tx', 'goals', 'goalAllocations', 'recurring', 'invoices', 'people', 'reconciliations', 'settings.accounts', 'settings.categories', 'settings.jars'];
+export const LOGGED = ['tx', 'goals', 'goalAllocations', 'recurring', 'invoices', 'people', 'reconciliations', 'settings.accounts', 'settings.categories', 'settings.jars', 'settings.incomeSources'];
 /** Bookkeeping fields: never shown as a change. */
 export const QUIET_FIELDS = new Set(['updatedAt', 'createdAt', 'editedOn', 'lastMilestone']);
 

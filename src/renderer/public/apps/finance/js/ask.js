@@ -11,6 +11,7 @@ import { addDays, daysBetween, daysInMonth, monthLabel, monthKey } from './dates
 import { countsAsSpending, countsAsIncome, signed, isRefund } from './catshare.js';
 import { formatMoney } from './money.js';
 import { shortDay } from './safespend.js';
+import { sourceInText } from './incomesources.js';
 
 export const CANT = 'I can answer questions about amounts, categories and months.';
 
@@ -91,11 +92,13 @@ export function askMoney(state, question, today) {
       : /\bhow many\b/.test(q) ? 'count'
         : /\b(how much|total|sum|spent|spend|spending|earn|earned|earning|earnings|income|expenses?|cost|paid|made|received)\b/.test(q) ? 'sum' : null;
   if (!kindWord) return no;
-  const type = /\b(earn|earned|earning|earnings|income|incomes|made|salary|received)\b/.test(q) ? 'income' : 'expense';
+  // "how much from Job 2 this year": an income source of yours (it is always about Earned money).
+  const type = sourceInText(state, q) || /\b(earn|earned|earning|earnings|income|incomes|made|salary|received)\b/.test(q) ? 'income' : 'expense';
   const perMonth = kindWord === 'avg' && /\b(per month|a month|monthly)\b/.test(q) && !/\b(per day|a day|daily)\b/.test(q);
 
   const per = readPeriod(q, today) || { from: `${monthKey(today)}-01`, to: today, label: 'this month', days: Number(today.slice(8)), months: 1, rest: q, assumed: true };
-  const words = per.rest.split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter((w) => w && !STOP.has(w) && !/^\d+$/.test(w));
+  const src = type === 'income' ? sourceInText(state, per.rest) : null;
+  const words = (src ? src.rest : per.rest).split(/\s+/).map((w) => w.replace(/[^\p{L}\p{N}]/gu, '')).filter((w) => w && !STOP.has(w) && !/^\d+$/.test(w));
 
   const inScope = state.tx.filter((t) => (type === 'income' ? countsAsIncome(t) : countsAsSpending(t)) && t.date >= per.from && t.date <= per.to);
 
@@ -117,6 +120,7 @@ export function askMoney(state, question, today) {
   }
 
   const list = inScope.filter((t) => {
+    if (src && t.incomeSource !== src.source.id) return false;
     if (cats.size || subs.size) {
       if (!(cats.has(t.category) || subs.has(t.sub))) return false;
     }
@@ -126,7 +130,7 @@ export function askMoney(state, question, today) {
   const amt = (t) => (type === 'income' ? B(t) : signed(t, B(t)));
   const total = list.reduce((a, t) => a + amt(t), 0);
   const what = type === 'income' ? 'Earned' : 'Spent';
-  const scope = [catLabels.length ? `on ${[...new Set(catLabels)].join(' and ')}` : '', noteWords.length ? `at ${noteWords.join(' ')}` : ''].filter(Boolean).join(' ');
+  const scope = [src ? `from ${src.source.name}` : '', catLabels.length ? `on ${[...new Set(catLabels)].join(' and ')}` : '', noteWords.length ? `at ${noteWords.join(' ')}` : ''].filter(Boolean).join(' ');
   const where = `${scope ? `${scope} ` : ''}${per.label}`;
   const fm = (c) => formatMoney(Math.round(c), base);
 
@@ -134,6 +138,7 @@ export function askMoney(state, question, today) {
   for (const id of cats) searchParts.push(`cat:${id}`);
   for (const id of subs) { const s = subRows.find((x) => x.id === id); if (s) searchParts.push(`sub:${fold(s.name).split(/\s+/)[0]}`); }
   if (!cats.size && !subs.size) searchParts.push(type === 'income' ? 'earned' : 'spent');
+  if (src) searchParts.push(`source:"${src.source.name}"`);
   searchParts.push(...noteWords, `from:${per.from}`, `to:${per.to}`);
   const search = searchParts.join(' ');
   const byDate = [...list].sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0));

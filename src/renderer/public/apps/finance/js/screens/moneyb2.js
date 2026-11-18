@@ -76,6 +76,7 @@ export function reviewCard(today = todayISO()) {
       <div><dt>Biggest change</dt><dd>${top}</dd></div>
       <div><dt>Savings rate</dt><dd data-testid="b2-rate">${rate}</dd></div>
       <div><dt>Budgets over</dt><dd>${over}</dd></div>
+      ${r.sources?.length ? `<div><dt>Income by source</dt><dd data-testid="b2-sources">${r.sources.map((x) => `${esc(x.name)} ${esc(f(x.amount))}`).join(' · ')}</dd></div>` : ''}
     </dl>
     <p class="b2-tip">${esc(r.tip.text)}</p>
     <div class="btns"><button type="button" class="btn small" data-act="recap-open" data-key="${esc(r.key)}">Open full recap</button></div>
