@@ -65,6 +65,18 @@ export class BrowserDb {
   /** Changes made since the last `takeChanges()`, in order. */
   private changes: Change[] = []
   private pkCache = new Map<string, string | null>()
+  /**
+   * Called with the table a statement is about to change, before it runs (the
+   * desktop keeps that table's rows from before the change, to send only what
+   * changed: no copy of the whole database is needed for that).
+   */
+  onTouch: ((table: string) => void) | null = null
+  private static TOUCH = /^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["`]?(\w+)["`]?/i
+  private touch(sql: string): void {
+    if (!this.onTouch) return
+    const t = BrowserDb.TOUCH.exec(sql)?.[1]
+    if (t) this.onTouch(t)
+  }
 
   constructor(public readonly raw: SqlJsDatabase) {}
 
@@ -180,6 +192,7 @@ export class BrowserDb {
       }
     }
     const before = this.scalar('SELECT last_insert_rowid()')
+    if (isWrite(change.sql)) this.touch(change.sql)
     this.raw.run(change.sql, change.args as SqlValue[])
     const changes = this.raw.getRowsModified()
     const after = this.scalar('SELECT last_insert_rowid()')
@@ -208,6 +221,7 @@ export class BrowserDb {
   }
 
   exec(sql: string): void {
+    if (isWrite(sql)) this.touch(sql)
     this.raw.exec(sql)
     if (isWrite(sql)) this.changes.push({ sql, args: [] })
   }

@@ -41323,6 +41323,18 @@ var BrowserDb = class BrowserDb {
 	/** Changes made since the last `takeChanges()`, in order. */
 	changes = [];
 	pkCache = /* @__PURE__ */ new Map();
+	/**
+	* Called with the table a statement is about to change, before it runs (the
+	* desktop keeps that table's rows from before the change, to send only what
+	* changed: no copy of the whole database is needed for that).
+	*/
+	onTouch = null;
+	static TOUCH = /^\s*(?:INSERT(?:\s+OR\s+\w+)?\s+INTO|REPLACE\s+INTO|UPDATE(?:\s+OR\s+\w+)?|DELETE\s+FROM)\s+["`]?(\w+)["`]?/i;
+	touch(sql) {
+		if (!this.onTouch) return;
+		const t = BrowserDb.TOUCH.exec(sql)?.[1];
+		if (t) this.onTouch(t);
+	}
 	constructor(raw) {
 		this.raw = raw;
 	}
@@ -41434,6 +41446,7 @@ var BrowserDb = class BrowserDb {
 			}
 		}
 		const before = this.scalar("SELECT last_insert_rowid()");
+		if (isWrite(change.sql)) this.touch(change.sql);
 		this.raw.run(change.sql, change.args);
 		const changes = this.raw.getRowsModified();
 		const after = this.scalar("SELECT last_insert_rowid()");
@@ -41460,6 +41473,7 @@ var BrowserDb = class BrowserDb {
 		};
 	}
 	exec(sql) {
+		if (isWrite(sql)) this.touch(sql);
 		this.raw.exec(sql);
 		if (isWrite(sql)) this.changes.push({
 			sql,
@@ -41645,13 +41659,35 @@ function tableRows(db, t, keys) {
 	}
 	return out;
 }
-/** The rows that differ between two copies, in the given tables. */
-function diffRows(before, after, tables, info) {
+/** A table's rows as they are now, by key (taken before a change touches the table). */
+function snapshotTable(db, t, info) {
+	return tableRows(db, t, info.keys[t] ?? []);
+}
+var sameRow = (a, b) => {
+	const ka = Object.keys(a);
+	if (ka.length !== Object.keys(b).length) return false;
+	for (const k of ka) {
+		const x = a[k];
+		const y = b[k];
+		if (x === y) continue;
+		if (x instanceof Uint8Array || y instanceof Uint8Array) {
+			if (!same(x, y)) return false;
+			continue;
+		}
+		return false;
+	}
+	return true;
+};
+/**
+* The rows a change touched: each table's rows from before the change (kept
+* when the change first touched it) against the database as it is now. The
+* same answer as `diffRows` on a copy of the whole database from before, without that copy.
+*/
+function diffFrom(before, after, tables, info) {
 	const out = [];
 	for (const t of tables) {
-		const keys = info.keys[t] ?? [];
-		const a = tableRows(before, t, keys);
-		const b = tableRows(after, t, keys);
+		const a = before.get(t) ?? /* @__PURE__ */ new Map();
+		const b = tableRows(after, t, info.keys[t] ?? []);
 		for (const [k, { key, row }] of b) {
 			if (t === "settings" && row.key === "data_version") continue;
 			const old = a.get(k);
@@ -41661,7 +41697,7 @@ function diffRows(before, after, tables, info) {
 				before: null,
 				after: row
 			});
-			else if (!same(old.row, row)) out.push({
+			else if (!sameRow(old.row, row)) out.push({
 				t,
 				key,
 				before: old.row,
@@ -41676,6 +41712,59 @@ function diffRows(before, after, tables, info) {
 		});
 	}
 	return out;
+}
+/** Puts the touched rows back the way they were (a change that could not be saved on this PC). */
+function undoRows(db, rows, info) {
+	for (const r of [...rows].reverse()) {
+		const w = where(r.key);
+		if (!r.before) {
+			db.run(`DELETE FROM ${q$1(r.t)} WHERE ${w.sql}`, w.args);
+			continue;
+		}
+		const cols = Object.keys(r.before);
+		if (!r.after) {
+			const withRowid = "rowid" in r.key && !(info.keys[r.t] ?? []).length;
+			const names = [...withRowid ? ["rowid"] : [], ...cols.map(q$1)];
+			db.run(`INSERT INTO ${q$1(r.t)} (${names.join(", ")}) VALUES (${names.map(() => "?").join(", ")})`, [...withRowid ? [r.key.rowid] : [], ...cols.map((c) => r.before[c])]);
+			continue;
+		}
+		db.run(`UPDATE ${q$1(r.t)} SET ${cols.map((c) => `${q$1(c)} = ?`).join(", ")} WHERE ${w.sql}`, [...cols.map((c) => r.before[c]), ...w.args]);
+	}
+}
+/**
+* The settings keys a change sets, when that is ALL it does (no other table,
+* no deletion, no table change): such a change can stand in for an earlier
+* waiting change of the same keys (the latest value wins). Null otherwise.
+*/
+function settingKeysOf(changes, rows) {
+	if (!rows.length || changes.some((c) => /^\s*(CREATE|ALTER|DROP)\s/i.test(c.sql))) return null;
+	if (touchedTables(changes).some((t) => t !== "settings")) return null;
+	const keys = [];
+	for (const r of rows) {
+		if (r.t !== "settings" || !r.after || typeof r.after.key !== "string") return null;
+		keys.push(r.after.key);
+	}
+	return keys;
+}
+/** About how many bytes a change is as one request (its statements and values as JSON). */
+function requestBytes(changes, skip = () => false) {
+	let n = 0;
+	for (const c of changes) {
+		if (skip(c)) continue;
+		n += c.sql.length + 40;
+		for (const a of c.args) n += typeof a === "string" ? jsonBytes(a) : a instanceof Uint8Array ? Math.ceil(a.length * 1.34) + 30 : 24;
+	}
+	return n;
+}
+/** A text's size inside a JSON request: UTF-8 bytes plus one for each quote, backslash and control character. */
+function jsonBytes(s) {
+	let n = s.length + 2;
+	for (let i = 0; i < s.length; i++) {
+		const c = s.charCodeAt(i);
+		if (c === 34 || c === 92 || c < 32) n += c < 32 ? 5 : 1;
+		else if (c > 127) n += c > 2047 ? 2 : 1;
+	}
+	return n;
 }
 var isTimeKey = (k) => /(^|_)(at|ts|time|date)$|[a-z]At$|^savedAt$|updated|stamp/i.test(k);
 var isObj = (v) => !!v && typeof v === "object" && !Array.isArray(v);
@@ -42359,7 +42448,7 @@ var Mirror = class Mirror {
 		await this.lock(async () => {
 			if (this.desktop) {
 				if (this.db) await this.flushDesktop();
-				if (this.db && this.pending().length) throw new MirrorError(`${this.pending().length} change(s) on this PC are not sent yet`);
+				if (this.db && this.pendingCount()) throw new MirrorError(`${this.pendingCount()} change(s) on this PC are not sent yet`);
 			} else {
 				await this.flushOffline(true);
 				if (this.outbox().length) throw new MirrorError(this.waitingNote(this.outbox().length));
@@ -42541,7 +42630,7 @@ var Mirror = class Mirror {
 				await this.flushDesktop();
 			} catch (e) {
 				this.lastError = `Couldn't send this PC's changes yet: ${e.message}`.slice(0, 240);
-				if (this.pending().length) return false;
+				if (this.pendingCount()) return false;
 			}
 			if (!this.desktop) await this.flushOffline(true);
 			if (!this.desktop && this.outbox().length) return false;
@@ -42934,9 +43023,72 @@ var Mirror = class Mirror {
 			this.store.save(this.db.raw.export()).catch(() => {});
 		} catch {}
 	}
+	/**
+	* The desktop's waiting changes. `skeys`: the settings keys a change sets when
+	* that is all it does (a later change of the same keys replaces it). `base`:
+	* the version this change follows, when a change before it was replaced or set aside.
+	*/
+	outboxReady = null;
 	pending() {
-		this.current.raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
-		return this.current.prepare("SELECT id, data FROM desktop_outbox ORDER BY id").all();
+		const raw = this.current.raw;
+		if (this.outboxReady !== this.current) {
+			raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)");
+			const cols = new Set((raw.exec("PRAGMA table_info(desktop_outbox)")[0]?.values ?? []).map((r) => String(r[1])));
+			if (!cols.has("skeys")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN skeys TEXT");
+			if (!cols.has("base")) raw.run("ALTER TABLE desktop_outbox ADD COLUMN base TEXT");
+			raw.run("CREATE TABLE IF NOT EXISTS desktop_outbox_stuck (id INTEGER PRIMARY KEY, data TEXT NOT NULL, error TEXT, at TEXT, bytes INTEGER, tables TEXT)");
+			this.outboxReady = this.current;
+		}
+		return this.current.prepare("SELECT id, data, skeys, base FROM desktop_outbox ORDER BY id").all();
+	}
+	/** How many changes wait on this PC (no row is read). */
+	pendingCount() {
+		if (this.outboxReady !== this.current) this.pending();
+		return Number(this.current.raw.exec("SELECT COUNT(*) FROM desktop_outbox")[0]?.values[0]?.[0] ?? 0);
+	}
+	pendingIds() {
+		if (this.outboxReady !== this.current) this.pending();
+		return (this.current.raw.exec("SELECT id FROM desktop_outbox ORDER BY id")[0]?.values ?? []).map((r) => Number(r[0]));
+	}
+	pendingRow(id) {
+		return this.current.prepare("SELECT id, data, skeys, base FROM desktop_outbox WHERE id = ?").get(id);
+	}
+	/** Changes this PC could not send because one request can't carry them (kept here, shown in the Data center). */
+	stuckWrites() {
+		if (!this.desktop || !this.db) return [];
+		if (this.outboxReady !== this.current) this.pending();
+		return this.current.prepare("SELECT id, error, at, bytes, tables FROM desktop_outbox_stuck ORDER BY id").all().map((r) => ({
+			id: Number(r.id),
+			at: String(r.at ?? ""),
+			error: String(r.error ?? ""),
+			bytes: Number(r.bytes) || 0,
+			tables: String(r.tables ?? "").split(",").filter(Boolean)
+		}));
+	}
+	/**
+	* Tries the set-aside changes again: each goes back in line and is merged
+	* into the server's newest rows (it was made on an older copy).
+	*/
+	retryStuck() {
+		return this.ready.then(() => this.lock(async () => {
+			if (!this.desktop || !this.store) return;
+			this.pending();
+			const raw = this.current.raw;
+			const rows = this.current.prepare("SELECT id, data FROM desktop_outbox_stuck ORDER BY id").all();
+			if (!rows.length) return;
+			raw.run("BEGIN");
+			for (const r of rows) {
+				raw.run("INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, NULL, NULL)", [encodePending({
+					...decodePending(r.data),
+					rebase: true
+				})]);
+				raw.run("DELETE FROM desktop_outbox_stuck WHERE id = ?", [r.id]);
+			}
+			raw.run("COMMIT");
+			await this.store.save(raw.export());
+			this.desktopStatus();
+			await this.flushDesktop().catch(() => {});
+		}));
 	}
 	/** The sync panel's numbers (Y9). */
 	health() {
@@ -42946,31 +43098,79 @@ var Mirror = class Mirror {
 			waiting: this.pendingOffline,
 			waitingSince: since ? new Date(since).toISOString() : null,
 			locked: this.locked,
-			desktopPending: this.desktop && this.db ? this.pending().length : 0,
+			desktopPending: this.desktop && this.db ? this.pendingCount() : 0,
 			error: this.lastError,
 			failed: this.failedSync.map((f) => ({
 				at: f.at,
 				error: f.error
-			}))
+			})),
+			stuck: this.stuckWrites()
 		};
 	}
 	desktopStatus() {
 		if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent("life-desktop-sync", { detail: {
-			pending: this.db ? this.pending().length : 0,
-			error: this.lastError,
+			pending: this.db ? this.pendingCount() : 0,
+			error: this.lastError ?? this.stuckNote(),
 			syncedAt: this.syncedAt
 		} }));
 	}
+	/** One request may be this big (the server refuses 4.5 MB; the rest is headroom for the envelope). */
+	static MAX_REQUEST = 4e6;
+	/** What the sync status says while a change is set aside. */
+	stuckNote() {
+		const n = this.stuckWrites().length;
+		return n ? `${n} change${n === 1 ? " is" : "s are"} too big to send and ${n === 1 ? "is" : "are"} kept on this PC. Open Data center → Sync.` : null;
+	}
+	/**
+	* A change one request can never carry is set aside (kept whole on this PC,
+	* shown in the Data center) so the changes after it still go out.
+	*/
+	setAside(row, write, error, bytes) {
+		const raw = this.current.raw;
+		raw.run("BEGIN");
+		raw.run("INSERT INTO desktop_outbox_stuck (data, error, at, bytes, tables) VALUES (?, ?, ?, ?, ?)", [
+			row.data,
+			error.slice(0, 240),
+			(/* @__PURE__ */ new Date()).toISOString(),
+			bytes,
+			touchedTables(write.changes).join(",")
+		]);
+		raw.run("DELETE FROM desktop_outbox WHERE id = ?", [row.id]);
+		const next = raw.exec("SELECT id FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1", [row.id])[0]?.values[0]?.[0];
+		if (next != null) raw.run("UPDATE desktop_outbox SET base = ? WHERE id = ?", [row.base ?? write.base, Number(next)]);
+		else this.held = {
+			base: row.base ?? write.base,
+			when: this.version ?? ""
+		};
+		raw.run("COMMIT");
+	}
+	/** The version the next new change follows when the last waiting one was set aside (`when`: this copy's version then). */
+	held = null;
 	async flushDesktop() {
 		let merged = false;
 		try {
-			const rows = this.pending();
-			const info = rows.length ? schemaInfo(this.current.raw) : void 0;
-			for (const { id } of rows) {
-				const row = this.pending().find((x) => x.id === id);
+			const ids = this.pendingIds();
+			const info = ids.length ? this.schema() : void 0;
+			for (const id of ids) {
+				const row = this.pendingRow(id);
 				if (!row) continue;
 				const write = decodePending(row.data);
-				const r = await sendPending(this.turso, write, info);
+				if (row.base != null) write.base = row.base;
+				const bytes = requestBytes(write.changes, this.chunkable);
+				let r;
+				if (bytes > Mirror.MAX_REQUEST) {
+					this.setAside(row, write, `This change is ${(bytes / 1048576).toFixed(1)} MB; one request can carry ${(Mirror.MAX_REQUEST / 1048576).toFixed(1)} MB`, bytes);
+					await this.store.save(this.current.raw.export());
+					continue;
+				}
+				try {
+					r = await sendPending(this.turso, write, info);
+				} catch (e) {
+					if (!isTooBig(e)) throw e;
+					this.setAside(row, write, String(e?.message ?? e), bytes);
+					await this.store.save(this.current.raw.export());
+					continue;
+				}
 				this.current.raw.run("BEGIN");
 				this.current.raw.run("DELETE FROM desktop_outbox WHERE id = ?", [row.id]);
 				if (!r.merged && this.tv) {
@@ -42984,7 +43184,7 @@ var Mirror = class Mirror {
 						...remap[t] ?? {},
 						...ids
 					};
-					for (const next of this.pending()) this.current.raw.run("UPDATE desktop_outbox SET data = ? WHERE id = ?", [encodePending({
+					for (const next of this.pending()) this.current.raw.run("UPDATE desktop_outbox SET data = ?, skeys = NULL WHERE id = ?", [encodePending({
 						...decodePending(next.data),
 						rebase: true,
 						remap
@@ -42999,7 +43199,7 @@ var Mirror = class Mirror {
 				await this.store.save(this.current.raw.export());
 				this.emit();
 			}
-			this.lastError = null;
+			this.lastError = this.stuckNote();
 			this.syncedAt = (/* @__PURE__ */ new Date()).toISOString();
 		} catch (error) {
 			this.lastError = error.message;
@@ -43008,51 +43208,142 @@ var Mirror = class Mirror {
 			this.desktopStatus();
 		}
 	}
+	/** Statements whose big value travels in pieces (so they never make a request too big). */
+	chunkable = () => false;
+	/** The table layout of this copy (read once per copy; a table change reads it again). */
+	schemaOf = null;
+	schema() {
+		if (this.schemaOf?.db !== this.current) this.schemaOf = {
+			db: this.current,
+			info: schemaInfo(this.current.raw)
+		};
+		return this.schemaOf.info;
+	}
 	writeDesktop(fn) {
 		return this.lock(async () => {
 			if (!this.store) throw new MirrorError("Local storage is unavailable");
 			const fresh = this.syncedAt && Date.now() - Date.parse(this.syncedAt) < 15e3;
-			if (!this.pending().length && !fresh) try {
+			if (!this.pendingCount() && !fresh) try {
 				await this.catchUp();
 			} catch {}
-			const before = this.current.raw.export();
+			this.pending();
+			const db = this.current;
+			const raw = db.raw;
+			const info = this.schema();
 			const base = this.version ?? "";
-			this.current.dropChanges();
+			const snaps = /* @__PURE__ */ new Map();
+			db.onTouch = (t) => {
+				if (!snaps.has(t)) snaps.set(t, snapshotTable(raw, t, info));
+			};
+			db.dropChanges();
 			let result;
+			let rows = [];
+			let queued = null;
 			try {
-				result = this.current.transaction(() => fn(this.current))();
-				const changes = this.current.takeChanges();
-				if (!changes.length) return result;
-				const old = new this.SQL.Database(before);
-				let rows;
-				try {
-					rows = diffRows(old, this.current.raw, touchedTables(changes), schemaInfo(this.current.raw));
-				} finally {
-					old.close();
-				}
-				if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return result;
-				const version = crypto.randomUUID();
-				this.pending();
-				this.current.raw.run("INSERT INTO desktop_outbox (data) VALUES (?)", [encodePending({
-					id: version,
-					base,
-					version,
-					changes,
-					rows
-				})]);
-				this.current.raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
-				await this.store.save(this.current.raw.export());
-				this.version = version;
+				db.transaction(() => {
+					result = fn(db);
+					const changes = db.takeChanges();
+					if (!changes.length) return;
+					rows = diffFrom(snaps, raw, touchedTables(changes), info);
+					const local = rows.map((r) => ({ ...r }));
+					if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return;
+					const version = crypto.randomUUID();
+					let writeBase = this.held && this.held.when === base ? this.held.base : base;
+					const dropped = [];
+					const nextBase = [];
+					const keys = settingKeysOf(changes, rows);
+					if (keys) {
+						const mine = new Set(keys);
+						const waiting = raw.exec("SELECT id, skeys FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC")[0]?.values ?? [];
+						for (const [id, sk] of waiting) {
+							let theirs;
+							try {
+								theirs = JSON.parse(String(sk));
+							} catch {
+								continue;
+							}
+							if (!Array.isArray(theirs) || !theirs.length || !theirs.every((k) => mine.has(k))) continue;
+							const old = this.pendingRow(Number(id));
+							const w = decodePending(old.data);
+							if (w.rebase || !w.rows) continue;
+							for (const r of rows) {
+								const was = w.rows.find((x) => x.t === "settings" && x.key.key === r.key.key);
+								if (was) r.before = was.before;
+							}
+							const oldBase = old.base ?? w.base;
+							const next = raw.exec("SELECT id, base FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1", [old.id])[0]?.values[0];
+							if (next) {
+								nextBase.push({
+									id: Number(next[0]),
+									base: next[1] == null ? null : String(next[1])
+								});
+								raw.run("UPDATE desktop_outbox SET base = ? WHERE id = ?", [oldBase, Number(next[0])]);
+							} else writeBase = oldBase;
+							raw.run("DELETE FROM desktop_outbox WHERE id = ?", [old.id]);
+							dropped.push(old);
+						}
+					}
+					raw.run("INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, ?, NULL)", [encodePending({
+						id: version,
+						base: writeBase,
+						version,
+						changes,
+						rows
+					}), keys ? JSON.stringify(keys) : null]);
+					const outboxId = Number(raw.exec("SELECT last_insert_rowid()")[0]?.values[0]?.[0]);
+					raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version]);
+					queued = {
+						version,
+						dropped,
+						nextBase,
+						held: this.held,
+						outboxId,
+						local,
+						ddl: changes.some((c) => /^\s*(CREATE|ALTER|DROP)\s/i.test(c.sql))
+					};
+				})();
+			} finally {
+				db.onTouch = null;
+			}
+			const q = queued;
+			if (!q) return result;
+			if (q.ddl) this.schemaOf = null;
+			try {
+				await this.store.save(raw.export());
 			} catch (error) {
-				this.current.raw.close();
-				this.db = new BrowserDb(new this.SQL.Database(before));
+				this.unqueue(q, base, info);
 				throw error;
 			}
+			this.held = null;
+			this.version = q.version;
 			this.emit();
 			this.desktopStatus();
 			this.lock(() => this.flushDesktop()).catch(() => {});
 			return result;
 		});
+	}
+	/** Undoes a change that was applied here but could not be saved to the disk. */
+	unqueue(q, base, info) {
+		const raw = this.current.raw;
+		raw.run("BEGIN");
+		try {
+			undoRows(raw, q.local, info);
+			raw.run("DELETE FROM desktop_outbox WHERE id = ?", [q.outboxId]);
+			for (const d of q.dropped) raw.run("INSERT INTO desktop_outbox (id, data, skeys, base) VALUES (?, ?, ?, ?)", [
+				d.id,
+				d.data,
+				d.skeys,
+				d.base
+			]);
+			for (const n of q.nextBase) raw.run("UPDATE desktop_outbox SET base = ? WHERE id = ?", [n.base, n.id]);
+			if (base) raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [base]);
+			else raw.run("DELETE FROM settings WHERE key = 'data_version'");
+			raw.run("COMMIT");
+		} catch (e) {
+			raw.run("ROLLBACK");
+			throw new MirrorError(`This change could not be saved on this PC, and could not be taken back cleanly (${String(e?.message ?? e)}). Restart the app before changing anything else.`);
+		}
+		this.held = q.held;
 	}
 	/** Reference schema: what the desktop app's migrations produce. */
 	referenceDb() {
@@ -43248,6 +43539,8 @@ var isAlreadySaved = (e) => /UNIQUE constraint failed: sys_writes\.id/i.test(Str
 var isUniqueClash = (e) => /UNIQUE constraint failed/i.test(String(e?.message ?? e)) && !isAlreadySaved(e);
 /** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
 var isRetryable = (e) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String(e?.message ?? "")) || e?.name === "TimeoutError" || e?.name === "AbortError";
+/** The server refused the request for its size: sending the same thing again can never work. */
+var isTooBig = (e) => /Turso HTTP 413|payload too large|entity too large|body exceeded/i.test(String(e?.message ?? e));
 /** A failure because there's no connection (not a refusal by the database). */
 var isOffline = (e) => typeof window !== "undefined" && (navigator.onLine === false || e instanceof TypeError || /failed to fetch|network|load failed/i.test(String(e?.message ?? "")));
 // src/server/goalsTick.ts

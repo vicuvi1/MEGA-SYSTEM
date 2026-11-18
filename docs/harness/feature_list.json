@@ -1707,6 +1707,19 @@
    ],
    "evidence": "2026-11-18: 21 regression tests (each failed before its fix), tsc clean, full vitest green",
    "notes": "Merge rules in docs/DECISIONS.md (Money merge rules after the data-safety audit). sw cache v73."
+  },
+  {
+   "id": "data-growth-10-years",
+   "area": "data-sync",
+   "title": "Money and the other app copies stay safe as they grow for 10+ years",
+   "user_visible_behavior": "Step 1 (desktop): days offline leave one waiting Money change instead of one per save; each change writes the database out once, not twice; a change too big for one request is set aside and shown in Data center → Sync (\"Too big to send\", with Try again) while everything after it keeps syncing; the routine Money check no longer re-merges tens of thousands of records when nothing changed.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/desktopOutbox.test.ts src/renderer/src/web/appSyncSkip.test.ts src/renderer/src/web/desktopSync.test.ts",
+    "SMOKE_ONLY=\"Data center|Money hub\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: tsc clean; full vitest green (12 new tests: coalescing, the version chain, a merge after coalescing, one export per change, undo after a failed disk save, set-aside by size and by 413, merge skip with the server still asked).",
+   "notes": "mirror.ts (writeDesktop, flushDesktop, stuckWrites, retryStuck), desktopSync.ts (snapshotTable, diffFrom, undoRows, settingKeysOf, requestBytes), browserDb.ts onTouch, appSync.ts compareKey, core/textHash.ts, SyncPanel.tsx. Rules: docs/DECISIONS.md \"Desktop waiting changes\"."
   }
  ]
 }

@@ -6,6 +6,7 @@
 // Device-only parts (Finance Helper's PIN, rates, theme…) never travel.
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Mirror } from './mirror'
+import { textSig } from '@core/textHash'
 
 export interface AppSyncSpec {
   /** localStorage key the app saves to. */
@@ -414,6 +415,13 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     return legacy ? { savedAt: 0, data: share(legacy) } : null
   }
 
+  // The three texts (this device's data, the agreed copy, this device's copy of the
+  // database) of the last run that changed nothing and was confirmed by the server,
+  // as fingerprints. While they stay the same, a run skips the merge and the compare.
+  let compared: string | null = null
+  let skippedCompares = 0
+  const compareKey = (local: string | null, agreed: string | null, db: string | null) => `${textSig(local)}|${textSig(agreed)}|${textSig(db)}|${get(RESTORED) ?? ''}`
+
   // The local copy as it was when this device last agreed with the database:
   // a save that leaves it unchanged is not an edit. Comparing the raw text is
   // cheap; turning a big copy into its shared form on every save was not.
@@ -466,8 +474,26 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       if (own) return own
     }
     const localRaw = get(spec.localKey)
-    const localShared = sharedOf(localRaw)
     const synced = get(SYNCED)
+    // Nothing changed since the last full compare that found both sides equal (this device's
+    // data, the agreed copy, this device's copy of the database: the same three texts): the
+    // merge and the record-by-record compare would say the same again. With thousands of
+    // records they take most of a second on the page's own thread, so they are skipped; a
+    // check still asks the SERVER whether it holds that same copy.
+    const dbRaw = spec.finalize || localRaw == null ? null : await mirror.read((db) => getSetting(db as any, spec.setting))
+    const startKey = dbRaw == null ? null : compareKey(localRaw, synced, dbRaw)
+    if (startKey != null && startKey === compared && !opts.full) {
+      skippedCompares++
+      if (!checking) return none
+      if ((await mirror.serverSetting(spec.setting, dbRaw)) === dbRaw) {
+        del(UNCONFIRMED)
+        clearOldBeforeRestore()
+        report({ state: 'ok', okAt: Date.now(), error: null, note: null })
+        return { ...none, confirmed: true, got: 0 }
+      }
+      // The server holds something else: compare in full, below.
+    }
+    const localShared = sharedOf(localRaw)
     let localChanged = localShared != null && localShared !== synced
     const realEdit = localChanged
     const { remote: remoteNow, raw: mirrorRaw } = await mirror.read((db) => ({ remote: remoteOf(db), raw: getSetting(db as any, spec.setting) }))
@@ -604,6 +630,12 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
       else set(UNCONFIRMED, '1')
     }
     if (confirmed) clearOldBeforeRestore()
+    // This run changed nothing and the server agrees: the same three texts need no compare next time.
+    compared = null
+    if (confirmed && startKey != null) {
+      const endKey = compareKey(get(spec.localKey), get(SYNCED), await mirror.read((db) => getSetting(db as any, spec.setting)))
+      if (endKey === startKey) compared = endKey
+    }
     if (confirmed) report({ state: 'ok', okAt: Date.now(), error: null, note: null, ...(sent.records ? { sent: sent.records } : {}) })
     else if (wrote != null || checking) report({ state: 'waiting', error: null, note: null })
     return { ok: true, sent: sent.records, changes: sent.other, confirmed, got }
@@ -663,7 +695,7 @@ export function createAppSync(mirror: Mirror, spec: AppSyncSpec, store: Storage 
     })
   }
 
-  return { sync, soon, spec, status: () => ({ ...status }) }
+  return { sync, soon, spec, status: () => ({ ...status }), /** How many runs skipped the merge and compare because nothing had changed (tests, the speed check). */ skipped: () => skippedCompares }
 }
 
 /**

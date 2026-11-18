@@ -12,7 +12,7 @@ import { DEFAULT_RULES } from '@core/rules'
 import { DEFAULT_EXERCISES } from '@core/body'
 import { BrowserDb, type Change, type Param } from './browserDb'
 import type { TursoHttp } from './tursoHttp'
-import { decodePending, diffRows, encodePending, schemaInfo, sendPending, touchedTables, type Remap } from './desktopSync'
+import { decodePending, diffFrom, encodePending, requestBytes, schemaInfo, sendPending, settingKeysOf, snapshotTable, touchedTables, undoRows, type PendingWrite, type Remap, type RowChange, type SchemaInfo, type TableSnap } from './desktopSync'
 import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
 import { retryDelay } from '@core/retry'
 import { APPEND_ONLY } from '@core/backupPlan'
@@ -65,6 +65,10 @@ export function indexedDbStore(name = 'life-system-mirror'): MirrorStore {
 }
 
 export class MirrorError extends Error {}
+
+type OutboxRow = { id: number; data: string; skeys: string | null; base: string | null }
+/** What a desktop change did locally besides the change itself, so it can be taken back if the disk save fails. */
+interface Queued { version: string; dropped: OutboxRow[]; nextBase: { id: number; base: string | null }[]; held: { base: string; when: string } | null; outboxId: number; local: RowChange[]; ddl: boolean }
 
 export class Mirror {
   private db: BrowserDb | null = null
@@ -144,7 +148,7 @@ export class Mirror {
     await this.lock(async () => {
       if (this.desktop) {
         if (this.db) await this.flushDesktop()
-        if (this.db && this.pending().length) throw new MirrorError(`${this.pending().length} change(s) on this PC are not sent yet`)
+        if (this.db && this.pendingCount()) throw new MirrorError(`${this.pendingCount()} change(s) on this PC are not sent yet`)
       } else {
         await this.flushOffline(true)
         if (this.outbox().length) throw new MirrorError(this.waitingNote(this.outbox().length))
@@ -338,7 +342,7 @@ export class Mirror {
           await this.flushDesktop()
         } catch (e) {
           this.lastError = `Couldn't send this PC's changes yet: ${(e as Error).message}`.slice(0, 240)
-          if (this.pending().length) return false
+          if (this.pendingCount()) return false
         }
       }
       // Changes made offline go first, so the fresh copy has them. The refresh
@@ -762,42 +766,146 @@ export class Mirror {
     }
   }
 
+  /**
+   * The desktop's waiting changes. `skeys`: the settings keys a change sets when
+   * that is all it does (a later change of the same keys replaces it). `base`:
+   * the version this change follows, when a change before it was replaced or set aside.
+   */
+  private outboxReady: BrowserDb | null = null
   private pending() {
-    this.current.raw.run('CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)')
-    return this.current.prepare('SELECT id, data FROM desktop_outbox ORDER BY id').all() as { id: number; data: string }[]
+    const raw = this.current.raw
+    if (this.outboxReady !== this.current) {
+      raw.run('CREATE TABLE IF NOT EXISTS desktop_outbox (id INTEGER PRIMARY KEY, data TEXT NOT NULL)')
+      const cols = new Set((raw.exec('PRAGMA table_info(desktop_outbox)')[0]?.values ?? []).map((r) => String(r[1])))
+      if (!cols.has('skeys')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN skeys TEXT')
+      if (!cols.has('base')) raw.run('ALTER TABLE desktop_outbox ADD COLUMN base TEXT')
+      raw.run('CREATE TABLE IF NOT EXISTS desktop_outbox_stuck (id INTEGER PRIMARY KEY, data TEXT NOT NULL, error TEXT, at TEXT, bytes INTEGER, tables TEXT)')
+      this.outboxReady = this.current
+    }
+    return this.current.prepare('SELECT id, data, skeys, base FROM desktop_outbox ORDER BY id').all() as { id: number; data: string; skeys: string | null; base: string | null }[]
+  }
+  /** How many changes wait on this PC (no row is read). */
+  private pendingCount(): number {
+    if (this.outboxReady !== this.current) this.pending()
+    return Number(this.current.raw.exec('SELECT COUNT(*) FROM desktop_outbox')[0]?.values[0]?.[0] ?? 0)
+  }
+  private pendingIds(): number[] {
+    if (this.outboxReady !== this.current) this.pending()
+    return (this.current.raw.exec('SELECT id FROM desktop_outbox ORDER BY id')[0]?.values ?? []).map((r) => Number(r[0]))
+  }
+  private pendingRow(id: number): { id: number; data: string; skeys: string | null; base: string | null } | undefined {
+    return this.current.prepare('SELECT id, data, skeys, base FROM desktop_outbox WHERE id = ?').get(id) as any
+  }
+
+  /** Changes this PC could not send because one request can't carry them (kept here, shown in the Data center). */
+  stuckWrites(): { id: number; at: string; error: string; bytes: number; tables: string[] }[] {
+    if (!this.desktop || !this.db) return []
+    if (this.outboxReady !== this.current) this.pending()
+    return (this.current.prepare('SELECT id, error, at, bytes, tables FROM desktop_outbox_stuck ORDER BY id').all() as any[]).map((r) => ({
+      id: Number(r.id),
+      at: String(r.at ?? ''),
+      error: String(r.error ?? ''),
+      bytes: Number(r.bytes) || 0,
+      tables: String(r.tables ?? '').split(',').filter(Boolean)
+    }))
+  }
+
+  /**
+   * Tries the set-aside changes again: each goes back in line and is merged
+   * into the server's newest rows (it was made on an older copy).
+   */
+  retryStuck(): Promise<void> {
+    return this.ready.then(() => this.lock(async () => {
+      if (!this.desktop || !this.store) return
+      this.pending()
+      const raw = this.current.raw
+      const rows = this.current.prepare('SELECT id, data FROM desktop_outbox_stuck ORDER BY id').all() as { id: number; data: string }[]
+      if (!rows.length) return
+      raw.run('BEGIN')
+      for (const r of rows) {
+        raw.run('INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, NULL, NULL)', [encodePending({ ...decodePending(r.data), rebase: true })])
+        raw.run('DELETE FROM desktop_outbox_stuck WHERE id = ?', [r.id])
+      }
+      raw.run('COMMIT')
+      await this.store.save(raw.export())
+      this.desktopStatus()
+      await this.flushDesktop().catch(() => {})
+    }))
   }
 
   /** The sync panel's numbers (Y9). */
-  health(): { syncedAt: string | null; waiting: number; waitingSince: string | null; locked: boolean; desktopPending: number; error: string | null; failed: { at: string; error: string }[] } {
+  health(): { syncedAt: string | null; waiting: number; waitingSince: string | null; locked: boolean; desktopPending: number; error: string | null; failed: { at: string; error: string }[]; stuck: { id: number; at: string; error: string; bytes: number; tables: string[] }[] } {
     const since = this.offlineSince
     return {
       syncedAt: this.syncedAt,
       waiting: this.pendingOffline,
       waitingSince: since ? new Date(since).toISOString() : null,
       locked: this.locked,
-      desktopPending: this.desktop && this.db ? this.pending().length : 0,
+      desktopPending: this.desktop && this.db ? this.pendingCount() : 0,
       error: this.lastError,
-      failed: this.failedSync.map((f) => ({ at: f.at, error: f.error }))
+      failed: this.failedSync.map((f) => ({ at: f.at, error: f.error })),
+      stuck: this.stuckWrites()
     }
   }
 
   private desktopStatus(): void {
     if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('life-desktop-sync', { detail: {
-      pending: this.db ? this.pending().length : 0, error: this.lastError, syncedAt: this.syncedAt
+      pending: this.db ? this.pendingCount() : 0, error: this.lastError ?? this.stuckNote(), syncedAt: this.syncedAt
     } }))
   }
+
+  /** One request may be this big (the server refuses 4.5 MB; the rest is headroom for the envelope). */
+  static MAX_REQUEST = 4_000_000
+  /** What the sync status says while a change is set aside. */
+  private stuckNote(): string | null {
+    const n = this.stuckWrites().length
+    return n ? `${n} change${n === 1 ? ' is' : 's are'} too big to send and ${n === 1 ? 'is' : 'are'} kept on this PC. Open Data center → Sync.` : null
+  }
+
+  /**
+   * A change one request can never carry is set aside (kept whole on this PC,
+   * shown in the Data center) so the changes after it still go out.
+   */
+  private setAside(row: { id: number; data: string; base: string | null }, write: PendingWrite, error: string, bytes: number): void {
+    const raw = this.current.raw
+    raw.run('BEGIN')
+    raw.run('INSERT INTO desktop_outbox_stuck (data, error, at, bytes, tables) VALUES (?, ?, ?, ?, ?)', [row.data, error.slice(0, 240), new Date().toISOString(), bytes, touchedTables(write.changes).join(',')])
+    raw.run('DELETE FROM desktop_outbox WHERE id = ?', [row.id])
+    // The next change follows the version this one followed (the server never saw this one).
+    const next = raw.exec('SELECT id FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1', [row.id])[0]?.values[0]?.[0]
+    if (next != null) raw.run('UPDATE desktop_outbox SET base = ? WHERE id = ?', [row.base ?? write.base, Number(next)])
+    else this.held = { base: row.base ?? write.base, when: this.version ?? '' }
+    raw.run('COMMIT')
+  }
+  /** The version the next new change follows when the last waiting one was set aside (`when`: this copy's version then). */
+  private held: { base: string; when: string } | null = null
 
   private async flushDesktop(): Promise<void> {
     let merged = false
     try {
-      const rows = this.pending()
-      const info = rows.length ? schemaInfo(this.current.raw) : undefined
-      for (const { id } of rows) {
+      const ids = this.pendingIds()
+      const info = ids.length ? this.schema() : undefined
+      for (const id of ids) {
         // Read it again: an earlier merge may have marked it.
-        const row = this.pending().find((x) => x.id === id)
+        const row = this.pendingRow(id)
         if (!row) continue
         const write = decodePending(row.data)
-        const r = await sendPending(this.turso, write, info)
+        if (row.base != null) write.base = row.base
+        const bytes = requestBytes(write.changes, this.chunkable)
+        let r: { merged: boolean; remap: Remap }
+        if (bytes > Mirror.MAX_REQUEST) {
+          this.setAside(row, write, `This change is ${(bytes / 1048576).toFixed(1)} MB; one request can carry ${(Mirror.MAX_REQUEST / 1048576).toFixed(1)} MB`, bytes)
+          await this.store!.save(this.current.raw.export())
+          continue
+        }
+        try {
+          r = await sendPending(this.turso, write, info)
+        } catch (e) {
+          if (!isTooBig(e)) throw e
+          this.setAside(row, write, String((e as Error)?.message ?? e), bytes)
+          await this.store!.save(this.current.raw.export())
+          continue
+        }
         // Persist acknowledgement before another operation can start. After a
         // merge, the later changes saw the old copy: they get merged too, with
         // any ids the server renumbered.
@@ -812,7 +920,8 @@ export class Mirror {
           const remap: Remap = { ...(write.remap ?? {}) }
           for (const [t, ids] of Object.entries(r.remap)) remap[t] = { ...(remap[t] ?? {}), ...ids }
           for (const next of this.pending()) {
-            this.current.raw.run('UPDATE desktop_outbox SET data = ? WHERE id = ?', [encodePending({ ...decodePending(next.data), rebase: true, remap }), next.id])
+            // A merged change is never replaced by a later one: it must go out as it is.
+            this.current.raw.run('UPDATE desktop_outbox SET data = ?, skeys = NULL WHERE id = ?', [encodePending({ ...decodePending(next.data), rebase: true, remap }), next.id])
           }
         }
         this.current.raw.run('COMMIT')
@@ -825,12 +934,22 @@ export class Mirror {
         await this.store!.save(this.current.raw.export())
         this.emit()
       }
-      this.lastError = null
+      this.lastError = this.stuckNote()
       this.syncedAt = new Date().toISOString()
     } catch (error) {
       this.lastError = (error as Error).message
       throw error
     } finally { this.desktopStatus() }
+  }
+
+  /** Statements whose big value travels in pieces (so they never make a request too big). */
+  private chunkable: (c: Change) => boolean = () => false
+
+  /** The table layout of this copy (read once per copy; a table change reads it again). */
+  private schemaOf: { db: BrowserDb; info: SchemaInfo } | null = null
+  private schema(): SchemaInfo {
+    if (this.schemaOf?.db !== this.current) this.schemaOf = { db: this.current, info: schemaInfo(this.current.raw) }
+    return this.schemaOf.info
   }
 
   private writeDesktop<T>(fn: (db: BrowserDb) => T): Promise<T> {
@@ -840,46 +959,120 @@ export class Mirror {
       // Live sync keeps it fresh, so a copy checked in the last 15 s is used as
       // it is (a tap on the island doesn't wait for the internet twice).
       const fresh = this.syncedAt && Date.now() - Date.parse(this.syncedAt) < 15_000
-      if (!this.pending().length && !fresh) {
+      if (!this.pendingCount() && !fresh) {
         try {
           await this.catchUp()
         } catch { /* cached data is still usable offline */ }
       }
-      const before = this.current.raw.export()
+      this.pending()
+      const db = this.current
+      const raw = db.raw
+      const info = this.schema()
       const base = this.version ?? ''
-      this.current.dropChanges()
-      let result: T
+      // Each table's rows from before the change, kept when the change first
+      // touches the table. (This used to be a copy of the whole database, made
+      // before every change and opened again to compare.)
+      const snaps = new Map<string, TableSnap>()
+      db.onTouch = (t) => {
+        if (!snaps.has(t)) snaps.set(t, snapshotTable(raw, t, info))
+      }
+      db.dropChanges()
+      let result!: T
+      let rows: RowChange[] = []
+      let queued: Queued | null = null
       try {
-        result = this.current.transaction(() => fn(this.current))()
-        const changes = this.current.takeChanges()
-        if (!changes.length) return result
-        // Which rows changed (before → after), so the change can be merged later.
-        const old = new this.SQL.Database(before)
-        let rows
-        try {
-          rows = diffRows(old, this.current.raw, touchedTables(changes), schemaInfo(this.current.raw))
-        } finally {
-          old.close()
-        }
-        if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return result
-        const version = crypto.randomUUID()
-        this.pending()
-        this.current.raw.run('INSERT INTO desktop_outbox (data) VALUES (?)', [encodePending({ id: version, base, version, changes, rows })])
-        this.current.raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
-        await this.store.save(this.current.raw.export())
-        this.version = version
+        // The change, its place in line and the version mark are one local step: all of it, or none.
+        db.transaction(() => {
+          result = fn(db)
+          const changes = db.takeChanges()
+          if (!changes.length) return
+          // Which rows changed (before → after), so the change can be merged later.
+          rows = diffFrom(snaps, raw, touchedTables(changes), info)
+          // As they changed on this PC (a replaced change moves a row's "before" further back, below).
+          const local = rows.map((r) => ({ ...r }))
+          if (!rows.length && !changes.some((c) => /^\s*(CREATE|ALTER)\s/i.test(c.sql))) return
+          const version = crypto.randomUUID()
+          let writeBase = this.held && this.held.when === base ? this.held.base : base
+          const dropped: { id: number; data: string; skeys: string | null; base: string | null }[] = []
+          const nextBase: { id: number; base: string | null }[] = []
+          // The latest value of a setting stands in for the ones still waiting:
+          // an earlier waiting change that only set these same keys is replaced
+          // (its "before" is kept, so a merge still starts from the right copy).
+          const keys = settingKeysOf(changes, rows)
+          if (keys) {
+            const mine = new Set(keys)
+            const waiting = raw.exec('SELECT id, skeys FROM desktop_outbox WHERE skeys IS NOT NULL ORDER BY id DESC')[0]?.values ?? []
+            for (const [id, sk] of waiting) {
+              let theirs: string[]
+              try {
+                theirs = JSON.parse(String(sk))
+              } catch {
+                continue
+              }
+              if (!Array.isArray(theirs) || !theirs.length || !theirs.every((k) => mine.has(k))) continue
+              const old = this.pendingRow(Number(id))!
+              const w = decodePending(old.data)
+              if (w.rebase || !w.rows) continue
+              for (const r of rows) {
+                const was = w.rows.find((x) => x.t === 'settings' && x.key.key === r.key.key)
+                if (was) r.before = was.before
+              }
+              const oldBase = old.base ?? w.base
+              const next = raw.exec('SELECT id, base FROM desktop_outbox WHERE id > ? ORDER BY id LIMIT 1', [old.id])[0]?.values[0]
+              if (next) {
+                nextBase.push({ id: Number(next[0]), base: next[1] == null ? null : String(next[1]) })
+                raw.run('UPDATE desktop_outbox SET base = ? WHERE id = ?', [oldBase, Number(next[0])])
+              } else writeBase = oldBase
+              raw.run('DELETE FROM desktop_outbox WHERE id = ?', [old.id])
+              dropped.push(old)
+            }
+          }
+          raw.run('INSERT INTO desktop_outbox (data, skeys, base) VALUES (?, ?, NULL)', [encodePending({ id: version, base: writeBase, version, changes, rows }), keys ? JSON.stringify(keys) : null])
+          const outboxId = Number(raw.exec('SELECT last_insert_rowid()')[0]?.values[0]?.[0])
+          raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [version])
+          queued = { version, dropped, nextBase, held: this.held, outboxId, local, ddl: changes.some((c) => /^\s*(CREATE|ALTER|DROP)\s/i.test(c.sql)) }
+        })()
+      } finally {
+        db.onTouch = null
+      }
+      const q = queued as Queued | null
+      if (!q) return result
+      if (q.ddl) this.schemaOf = null
+      try {
+        await this.store.save(raw.export())
       } catch (error) {
-        this.current.raw.close()
-        this.db = new BrowserDb(new this.SQL.Database(before))
+        // The change could not be saved on this PC: put the touched rows, the line and the version mark back.
+        this.unqueue(q, base, info)
         throw error
       }
+      this.held = null
+      this.version = q.version
       this.emit()
       this.desktopStatus()
       // A successful local save is usable offline. Remote failures retain the outbox.
       // It goes up right after this (next in line), so the caller isn't kept waiting.
       void this.lock(() => this.flushDesktop()).catch(() => {})
-      return result!
+      return result
     })
+  }
+
+  /** Undoes a change that was applied here but could not be saved to the disk. */
+  private unqueue(q: Queued, base: string, info: SchemaInfo): void {
+    const raw = this.current.raw
+    raw.run('BEGIN')
+    try {
+      undoRows(raw, q.local, info)
+      raw.run('DELETE FROM desktop_outbox WHERE id = ?', [q.outboxId])
+      for (const d of q.dropped) raw.run('INSERT INTO desktop_outbox (id, data, skeys, base) VALUES (?, ?, ?, ?)', [d.id, d.data, d.skeys, d.base])
+      for (const n of q.nextBase) raw.run('UPDATE desktop_outbox SET base = ? WHERE id = ?', [n.base, n.id])
+      if (base) raw.run("INSERT INTO settings (key, value) VALUES ('data_version', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", [base])
+      else raw.run("DELETE FROM settings WHERE key = 'data_version'")
+      raw.run('COMMIT')
+    } catch (e) {
+      raw.run('ROLLBACK')
+      throw new MirrorError(`This change could not be saved on this PC, and could not be taken back cleanly (${String((e as Error)?.message ?? e)}). Restart the app before changing anything else.`)
+    }
+    this.held = q.held
   }
 
   /** Reference schema: what the desktop app's migrations produce. */
@@ -1072,6 +1265,9 @@ const isUniqueClash = (e: unknown) => /UNIQUE constraint failed/i.test(String((e
 
 /** A failure worth retrying: locked (PIN), a 5xx, a timeout, too many requests (Y1). */
 const isRetryable = (e: unknown) => e instanceof UnauthorizedError || /Turso HTTP (5\d\d|408|429)|timed? ?out|abort/i.test(String((e as Error)?.message ?? '')) || (e as Error)?.name === 'TimeoutError' || (e as Error)?.name === 'AbortError'
+
+/** The server refused the request for its size: sending the same thing again can never work. */
+const isTooBig = (e: unknown) => /Turso HTTP 413|payload too large|entity too large|body exceeded/i.test(String((e as Error)?.message ?? e))
 
 /** A failure because there's no connection (not a refusal by the database). */
 const isOffline = (e: unknown) =>

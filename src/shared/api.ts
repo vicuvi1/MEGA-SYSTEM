@@ -918,6 +918,8 @@ export interface LifeApi {
     health?(): Promise<SyncHealth>
     /** Forget the "couldn't sync" list. */
     clearFailed?(): Promise<void>
+    /** Desktop: send the changes that were set aside as too big once more (merged into the server's newest rows). */
+    retryStuck?(): Promise<void>
     /** "Sync Money now": a full compare with the cloud copy and a send of anything missing ("Sent 37 records · cloud up to date"). */
     moneyNow?(): Promise<{ ok: boolean; text: string }>
   }
@@ -932,6 +934,8 @@ export interface SyncHealth {
   error: string | null
   /** Changes the database refused (another device changed the same thing). */
   failed: { at: string; error: string }[]
+  /** Desktop: changes one request can't carry. Kept whole on this PC, never dropped; the changes after them still go out. */
+  stuck?: { id: number; at: string; error: string; bytes: number; tables: string[] }[]
   backupError: string | null
   /** Each app's sync (Money, Sport Track…): last time the server confirmed it, skipped, or the error. */
   apps?: AppSyncState[]

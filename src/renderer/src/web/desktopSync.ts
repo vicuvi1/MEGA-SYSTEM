@@ -88,6 +88,108 @@ function tableRows(db: SqlJsDatabase, t: string, keys: string[]): Map<string, { 
   return out
 }
 
+export type TableSnap = Map<string, { key: Row; row: Row }>
+
+/** A table's rows as they are now, by key (taken before a change touches the table). */
+export function snapshotTable(db: SqlJsDatabase, t: string, info: SchemaInfo): TableSnap {
+  return tableRows(db, t, info.keys[t] ?? [])
+}
+
+// Two rows hold the same values. Plain values compare directly (a long text is
+// not turned into JSON first); only blobs need the slow path.
+const sameRow = (a: Row, b: Row): boolean => {
+  const ka = Object.keys(a)
+  if (ka.length !== Object.keys(b).length) return false
+  for (const k of ka) {
+    const x = a[k]
+    const y = b[k]
+    if (x === y) continue
+    if (x instanceof Uint8Array || y instanceof Uint8Array) {
+      if (!same(x, y)) return false
+      continue
+    }
+    return false
+  }
+  return true
+}
+
+/**
+ * The rows a change touched: each table's rows from before the change (kept
+ * when the change first touched it) against the database as it is now. The
+ * same answer as `diffRows` on a copy of the whole database from before, without that copy.
+ */
+export function diffFrom(before: Map<string, TableSnap>, after: SqlJsDatabase, tables: string[], info: SchemaInfo): RowChange[] {
+  const out: RowChange[] = []
+  for (const t of tables) {
+    const a = before.get(t) ?? new Map()
+    const b = tableRows(after, t, info.keys[t] ?? [])
+    for (const [k, { key, row }] of b) {
+      if (t === 'settings' && row.key === 'data_version') continue
+      const old = a.get(k)
+      if (!old) out.push({ t, key, before: null, after: row })
+      else if (!sameRow(old.row, row)) out.push({ t, key, before: old.row, after: row })
+    }
+    for (const [k, { key, row }] of a) if (!b.has(k)) out.push({ t, key, before: row, after: null })
+  }
+  return out
+}
+
+/** Puts the touched rows back the way they were (a change that could not be saved on this PC). */
+export function undoRows(db: SqlJsDatabase, rows: RowChange[], info: SchemaInfo): void {
+  for (const r of [...rows].reverse()) {
+    const w = where(r.key)
+    if (!r.before) {
+      db.run(`DELETE FROM ${q(r.t)} WHERE ${w.sql}`, w.args as any)
+      continue
+    }
+    const cols = Object.keys(r.before)
+    if (!r.after) {
+      const withRowid = 'rowid' in r.key && !(info.keys[r.t] ?? []).length
+      const names = [...(withRowid ? ['rowid'] : []), ...cols.map(q)]
+      db.run(`INSERT INTO ${q(r.t)} (${names.join(', ')}) VALUES (${names.map(() => '?').join(', ')})`, [...(withRowid ? [r.key.rowid] : []), ...cols.map((c) => r.before![c])] as any)
+      continue
+    }
+    db.run(`UPDATE ${q(r.t)} SET ${cols.map((c) => `${q(c)} = ?`).join(', ')} WHERE ${w.sql}`, [...cols.map((c) => r.before![c]), ...w.args] as any)
+  }
+}
+
+/**
+ * The settings keys a change sets, when that is ALL it does (no other table,
+ * no deletion, no table change): such a change can stand in for an earlier
+ * waiting change of the same keys (the latest value wins). Null otherwise.
+ */
+export function settingKeysOf(changes: Change[], rows: RowChange[]): string[] | null {
+  if (!rows.length || changes.some((c) => /^\s*(CREATE|ALTER|DROP)\s/i.test(c.sql))) return null
+  if (touchedTables(changes).some((t) => t !== 'settings')) return null
+  const keys: string[] = []
+  for (const r of rows) {
+    if (r.t !== 'settings' || !r.after || typeof r.after.key !== 'string') return null
+    keys.push(r.after.key)
+  }
+  return keys
+}
+
+/** About how many bytes a change is as one request (its statements and values as JSON). */
+export function requestBytes(changes: Change[], skip: (c: Change) => boolean = () => false): number {
+  let n = 0
+  for (const c of changes) {
+    if (skip(c)) continue
+    n += c.sql.length + 40
+    for (const a of c.args) n += typeof a === 'string' ? jsonBytes(a) : a instanceof Uint8Array ? Math.ceil(a.length * 1.34) + 30 : 24
+  }
+  return n
+}
+/** A text's size inside a JSON request: UTF-8 bytes plus one for each quote, backslash and control character. */
+export function jsonBytes(s: string): number {
+  let n = s.length + 2
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (c === 34 || c === 92 || c < 32) n += c < 32 ? 5 : 1
+    else if (c > 0x7f) n += c > 0x7ff ? 2 : 1
+  }
+  return n
+}
+
 /** The rows that differ between two copies, in the given tables. */
 export function diffRows(before: SqlJsDatabase, after: SqlJsDatabase, tables: string[], info: SchemaInfo): RowChange[] {
   const out: RowChange[] = []

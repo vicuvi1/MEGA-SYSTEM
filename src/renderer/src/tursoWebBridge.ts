@@ -1537,6 +1537,7 @@ export function createTursoWebBridge(): Bridge {
         return { ok: r.ok && !r.skipped && r.confirmed, text: appSyncRunText(r) }
       },
       clearFailed: async () => (await mirrorP).clearFailed(),
+      retryStuck: async () => (await mirrorP).retryStuck(),
       saveConfig: async () => bridge.sync.config(),
       test: async () => {
         const t = Date.now()

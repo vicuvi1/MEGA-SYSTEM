@@ -34,7 +34,8 @@ export function SyncPanel() {
   if (!life.sync.health || !h) return null
   const apps = h.apps ?? []
   const appsOk = apps.every((a) => a.state === 'ok' || a.state === 'never')
-  const ok = !h.error && !h.waiting && !h.desktopPending && !h.failed.length && !h.backupError && appsOk
+  const stuck = h.stuck ?? []
+  const ok = !h.error && !h.waiting && !h.desktopPending && !h.failed.length && !stuck.length && !h.backupError && appsOk
   const syncMoney = async () => {
     setMoney({ busy: true, text: 'Comparing Money with the cloud…', ok: true })
     try {
@@ -119,6 +120,24 @@ export function SyncPanel() {
           </ul>
         )}
       </div>
+      {stuck.length > 0 && (
+        <div style={{ marginTop: 8 }} data-testid="sync-stuck" role="alert">
+          <strong className="small">Too big to send ({stuck.length})</strong>
+          <p className="hint small">
+            {stuck.length === 1 ? 'This change is' : 'These changes are'} bigger than one request to the server can carry. {stuck.length === 1 ? 'It is' : 'They are'} kept on this PC and nothing was lost; your other changes keep syncing.
+          </p>
+          <ul className="small" style={{ maxHeight: 140, overflow: 'auto' }}>
+            {stuck.map((s) => (
+              <li key={s.id}>
+                {timeAgo(s.at)}: {s.tables.join(', ') || 'a change'} · {(s.bytes / 1048576).toFixed(1)} MB · {s.error}
+              </li>
+            ))}
+          </ul>
+          <button type="button" className="btn ghost small" data-testid="sync-stuck-retry" onClick={() => void life.sync.retryStuck?.().then(load)}>
+            Try again
+          </button>
+        </div>
+      )}
       {h.failed.length > 0 && (
         <div style={{ marginTop: 8 }}>
           <strong className="small">Couldn't sync ({h.failed.length})</strong>
