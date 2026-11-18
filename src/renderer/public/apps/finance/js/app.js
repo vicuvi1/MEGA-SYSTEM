@@ -1634,6 +1634,7 @@ function viewSettings() {
     ${themePicker(st)}
     <label class="field"><span>Currency</span><input type="text" data-set="currency" value="${esc(st.currency)}" maxlength="5"></label>
     ${Tips.settingsRow()}
+    ${Flow.settingsRow()}
   </section>
 `,
     extras: `<section class="card look-card"><h2>Extras</h2>

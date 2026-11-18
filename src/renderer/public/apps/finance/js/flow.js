@@ -15,24 +15,18 @@
 
 export const PREF_KEY = 'finance-helper.motion';
 
-// Off when the system asks for less motion, Life's Calm mode is on, or the
-// device pref says off.
+// Off when the system asks for less motion or the device switch says off.
+// Life's Calm mode does NOT turn Money's motion off (owner's choice).
 export function motionOff({ reduced = false, calm = false, pref = '' } = {}) {
   return !!(reduced || calm || pref === 'off');
 }
 
 const safe = (fn, dflt) => { try { return fn(); } catch { return dflt; } };
 
-// Life System sets html.calm on its own page; this frame is same-origin.
-function lifeCalm(win) {
-  return safe(() => win.parent !== win && !!win.parent.document.documentElement.classList.contains('calm'), false);
-}
-
 export function flowOff(win = typeof window !== 'undefined' ? window : null) {
   if (!win) return true;
   return motionOff({
     reduced: safe(() => win.matchMedia('(prefers-reduced-motion: reduce)').matches, false),
-    calm: lifeCalm(win),
     pref: safe(() => win.localStorage.getItem(PREF_KEY) || '', ''),
   });
 }
@@ -213,6 +207,12 @@ export function clearInvalid(input) {
   }
 }
 
+// The switch in Settings -> General (per device, like the tips).
+export function settingsRow(win = window) {
+  const on = !safe(() => win.localStorage.getItem(PREF_KEY) === 'off', false);
+  return `<label class="motion-setting"><span><b>Animations in Money</b><small>Fades, counting numbers and rows easing in. Off automatically if your system asks for reduced motion. Life System's Calm mode does not affect it.</small></span><input type="checkbox" data-anim-toggle ${on ? 'checked' : ''} aria-label="Animations in Money"></label>`;
+}
+
 // ---------- Start ----------
 
 let started = false;
@@ -223,8 +223,12 @@ export function initFlow(win = window) {
   const apply = () => { doc.documentElement.toggleAttribute('data-flow-off', flowOff(win)); };
   apply();
   safe(() => win.matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change', apply));
-  // Life's Calm switch changes html.calm on the parent page.
-  safe(() => { if (win.parent !== win) new MutationObserver(apply).observe(win.parent.document.documentElement, { attributes: true, attributeFilter: ['class'] }); });
+  doc.addEventListener('change', (e) => {
+    const t = e.target?.closest?.('[data-anim-toggle]');
+    if (!t) return;
+    safe(() => win.localStorage.setItem(PREF_KEY, t.checked ? 'on' : 'off'));
+    apply();
+  });
   win.addEventListener('storage', apply);
   // Typing in a wrong field clears its message.
   doc.addEventListener('input', (e) => { if (e.target?.classList?.contains('fld-bad')) clearInvalid(e.target); }, true);

@@ -115,7 +115,7 @@ describe('reduced motion and Calm switch everything off', () => {
     }
     expect(flowOff(win({}))).toBe(false)
     expect(flowOff(win({ reduced: true }))).toBe(true)
-    expect(flowOff(win({ inLife: true, calm: true }))).toBe(true)
+    expect(flowOff(win({ inLife: true, calm: true }))).toBe(false) // Calm does not affect Money's motion
     expect(flowOff(win({ inLife: true, calm: false }))).toBe(false)
     expect(flowOff(win({ pref: 'off' }))).toBe(true)
     expect(flowOff(null as any)).toBe(true)
