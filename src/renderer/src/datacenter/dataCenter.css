@@ -1,0 +1,56 @@
+/* Data center (2026-11-18): the health line, the 4 numbers, the bars and the controls.
+   Nothing here animates: the bars are drawn once (transform on a full-width fill). */
+.dc { display: grid; gap: var(--s-3); }
+.dc .ptab-panel { display: grid; gap: var(--s-3); }
+.dc .ptab-panel[hidden] { display: none; }
+.dc-health { display: flex; align-items: center; gap: var(--s-2); margin: 0 0 var(--s-3); font-size: var(--t-lg); font-weight: 600; overflow-wrap: anywhere; }
+.dc-health.red { color: var(--red); }
+.dc-numbers { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--s-2); margin-bottom: var(--s-3); }
+.dc-numbers > div { background: var(--surface-2); border-radius: 12px; padding: var(--s-3); display: grid; gap: 2px; align-content: start; min-width: 0; }
+.dc-numbers small { color: var(--muted); font-size: var(--t-xs); }
+.dc-numbers b { font-size: var(--t-xl); line-height: 1.15; }
+.dc-numbers span { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
+.dc-link { background: none; border: 0; padding: 0; color: var(--accent-text); cursor: pointer; font: inherit; text-decoration: underline; }
+
+.dc-meters { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--s-2); }
+.dc-meter { display: grid; gap: 4px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); min-width: 0; }
+.dc-meter-head { display: flex; justify-content: space-between; gap: var(--s-2); font-size: var(--t-sm); flex-wrap: wrap; }
+.dc-meter-head span { color: var(--muted); }
+.dc-meter small { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
+.dc-bar { position: relative; height: 8px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
+.dc-bar i { position: absolute; inset: 0; border-radius: 99px; background: var(--accent); transform-origin: left center; }
+.dc-bar u { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--border-strong); }
+.dc-meter[data-level='warn'] .dc-bar i { background: var(--amber, #ffb547); }
+.dc-meter[data-level='red'] .dc-bar i { background: var(--red); }
+.dc-meter[data-level='red'] .dc-meter-head span { color: var(--red); }
+.dc-more { margin-top: var(--s-3); font-size: var(--t-sm); }
+.dc-more summary { cursor: pointer; color: var(--muted); }
+.dc-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--s-3); margin-top: var(--s-2); }
+.dc-cols small { color: var(--muted); font-size: var(--t-xs); }
+.dc-cols ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 2px; }
+.dc-cols li { display: flex; justify-content: space-between; gap: var(--s-2); min-width: 0; }
+.dc-cols li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted); }
+
+.dc-forecasts { list-style: none; margin: 0 0 var(--s-3); padding: 0; display: grid; gap: var(--s-2); }
+.dc-forecasts li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); font-size: var(--t-sm); border-left: 3px solid transparent; }
+.dc-forecasts li[data-level='warn'] { border-left-color: var(--amber, #ffb547); }
+.dc-forecasts li[data-level='red'] { border-left-color: var(--red); }
+.dc-forecasts small { color: var(--muted); font-size: var(--t-xs); }
+
+.dc-controls { list-style: none; margin: 0 0 var(--s-3); padding: 0; display: grid; gap: var(--s-2); }
+.dc-control { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--s-3); padding: 8px 10px; border-radius: 10px; background: var(--surface-2); }
+.dc-control > div { display: grid; gap: 2px; min-width: 0; }
+.dc-control b { font-size: var(--t-sm); }
+.dc-control small { color: var(--muted); font-size: var(--t-xs); overflow-wrap: anywhere; }
+.dc-control select { margin: 0 2px; font-size: var(--t-xs); }
+.dc-result, .dc-confirm { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); font-size: var(--t-sm); margin-top: 4px; }
+.dc-result.bad { color: var(--red); }
+.dc-confirm { padding: 8px 10px; border-radius: 10px; background: var(--surface-3); }
+.dc-dl { display: inline-flex; align-items: center; gap: 6px; }
+.dc-dl small { color: var(--muted); font-size: var(--t-xs); }
+
+@media (max-width: 720px) {
+  .dc-numbers { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dc-cols { grid-template-columns: 1fr; }
+  .dc-control { grid-template-columns: 1fr; }
+}

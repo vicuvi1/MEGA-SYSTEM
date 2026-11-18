@@ -847,6 +847,12 @@ export interface LifeApi {
     backupBeforeRisk?(label: string): Promise<{ id: string; label: string; at: string; where: 'file' | 'browser'; name?: string; size?: number }>
     /** Settings → Data safety: the cloud backup, the off-site copy and the server's restore test. */
     safety?(): Promise<DataSafetyCloud>
+    /** Data center: the size of every table and setting of this device's copy of the database (reads only). */
+    usage?(): Promise<DataUsage>
+    /** Data center: the daily size samples (synced setting `data_size_samples`); with `add`, today's sample is saved first. */
+    sizeSamples?(add?: DataSample): Promise<DataSample[]>
+    /** Data center: when each device last had the server confirm each app's copy (synced setting `data_devices_seen`); with `add`, this device's entry is saved first. */
+    devicesSeen?(add?: DataDeviceSeen): Promise<DataDeviceSeen[]>
   }
     economy: {
     summary(): Promise<EconomySummary>
@@ -953,4 +959,27 @@ export interface DataSafetyCloud {
   drill: { at: string; ok: boolean; msg: string } | null
   /** False when the server's health notes could not be read (offline). */
   reachable: boolean
+}
+
+/** Data center: sizes in this device's copy of the database (web/dataUsage.ts). */
+export interface DataUsage {
+  /** Every table, biggest first: rows and the UTF-8 bytes of its values. */
+  tables: { name: string; rows: number; bytes: number }[]
+  /** Every setting, biggest first. `requestBytes`: its size as it travels in one request. */
+  settings: { key: string; bytes: number; requestBytes: number }[]
+}
+
+/** One day's sizes (core/dataCenter.ts Sample). */
+export interface DataSample {
+  day: string
+  sizes: Record<string, number>
+}
+
+/** One device's last confirmed sync per app setting (ms). */
+export interface DataDeviceSeen {
+  id: string
+  name: string
+  /** When this entry was written (ms). */
+  at: number
+  apps: Record<string, number | null>
 }

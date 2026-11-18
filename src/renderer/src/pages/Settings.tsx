@@ -230,8 +230,8 @@ export function Settings(props: SettingsProps) {
       id: 'backups',
       label: 'Data safety',
       icon: 'shield',
-      hint: 'Backups, restore, undo, export everything',
-      keywords: 'data safety backup backups restore undo export everything import google drive folder snapshot data off-site offsite csv zip',
+      hint: 'Opens the Data center: backups, restore, sync, space left',
+      keywords: 'data center data safety backup backups restore undo export everything import google drive folder snapshot data off-site offsite csv zip sync space storage clean up',
       body: <BackupsSection s={s} />
     },
     ...(features.updates

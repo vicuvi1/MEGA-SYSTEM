@@ -11,6 +11,8 @@ import { backupTextOf } from './safety/backupFiles'
 import { loadSafety, loadSql, readLocalDrill, safetyChanged, saveLocalDrill } from './safety/safetyState'
 import { restoreDrill } from './web/restoreDrill'
 import { weeklyCheckIfDue } from './safety/weeklyCheck'
+import { dataNotice } from '@core/dataCenter'
+import { quickWarnings } from './datacenter/usage'
 
 const localDay = () => calendarDay(new Date())
 
@@ -51,14 +53,18 @@ export async function testLocalRestore(): Promise<{ ok: boolean; msg: string } |
   return r
 }
 
-/** One of the day's 4 notifications when something about your backups is red (at most once a day). */
+/**
+ * One of the day's 4 notifications (the 'backup' slot, at most once a day) when something about your
+ * backups is red, or a store of your data passed its warning level (Data center, 2026-11-18).
+ */
 async function warnIfRed() {
   const day = localDay()
   if (localStorage.getItem('life_backup_warned') === day) return
   const s = await loadSafety(true)
-  if (!s.red) return
-  const red = s.rows.filter((r) => r.light === 'red')
-  const shown = await window.desktop?.notify?.({ id: slotNotifId('backup', day), title: 'Life System: a backup needs a look', body: `${red.map((r) => r.label).join(', ')}. Open Settings → Data safety.` }).catch(() => false)
+  const full = await quickWarnings().catch(() => [])
+  const note = dataNotice(s.red ? s.rows.filter((r) => r.light === 'red').map((r) => r.label) : [], full)
+  if (!note) return
+  const shown = await window.desktop?.notify?.({ id: slotNotifId('backup', day), title: note.title, body: note.body }).catch(() => false)
   if (shown !== false) localStorage.setItem('life_backup_warned', day)
 }
 

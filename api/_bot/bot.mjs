@@ -65,6 +65,8 @@ function flag(about) {
 }
 var SETTINGS = {
 	data_version: num$9("bumped on every write; devices refresh when it changes"),
+	data_size_samples: json$7("Data center: one size sample a day of each synced copy and the Life tables, for the \"how long is it enough\" forecast (core/dataCenter.ts addSample; at most about 100 small entries)", []),
+	data_devices_seen: json$7("Data center: per device, when the server last confirmed each app copy (read before any deletion mark may be dropped; core/dataCenter.ts prunableTombstones)", {}),
 	coach_tick_at: num$9("old place of the tick clock (now in sys_kv); never written to settings"),
 	pin_hash: text$2("old device PIN hash (the PIN lives on the server now)"),
 	theme: text$2("the app look (dark / light)"),

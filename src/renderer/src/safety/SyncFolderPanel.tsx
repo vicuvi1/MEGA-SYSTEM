@@ -1,4 +1,4 @@
-// Settings → Data safety → Sync folder (desktop, 2026-11-18): a live copy of
+// Data center → Sync → Sync folder (desktop, 2026-11-18): a live copy of
 // all data in a folder you choose (OneDrive, Google Drive, Dropbox, a USB
 // drive…), written a few seconds after every change, with rolling versions you
 // can preview and restore. It never needs the server. The website shows nothing.

@@ -1681,6 +1681,20 @@
    ],
    "evidence": "2026-11-18: 38 unit tests (atomic write and rename, a damaged read-back, rotation, manifest and SHA-256, missing folder, preview and restore, encryption, pacing with a fake clock, merge refuses) and the smoke step pass.",
    "notes": "Not run on real Windows hardware with OneDrive or a USB drive: the Electron wiring (folder picker, safeStorage, quit/sleep/lock) is type-checked only. Restore needs the server. Merge design: docs/DECISIONS.md."
+  },
+  {
+   "id": "data-center",
+   "priority": 1,
+   "area": "data-sync",
+   "title": "Data center: space left, how long it lasts, backups, sync and clean-up on one page",
+   "user_visible_behavior": "A Data center page (bottom of the sidebar, Ctrl+K, linked from Settings → Data safety): a health line (\"All safe · last backup 2 h ago · synced 3 min ago\") and 4 numbers; a bar with used / limit for each app's synced copy and all settings together (4.5 MB a request, amber at 2.5 MB, red at 3.5 MB), app storage on the device (about 5 million characters), browser storage, Money's change history, Life tables, the desktop database file and backup folder, and the cloud database (estimate, 5 GB); \"At your pace (125 KB a month), Money: synced copy reaches its limit in about 2 years 3 months (Mar 2029)\" with what the estimate rests on; Back up now, Sync now, the backups / restore / export panels and the sync status (moved from Settings); Clean up with a confirmation in the page, what it frees, a backup first and Undo (change history by age, the copy from before a restore, app caches); per-app downloads; a Sync folder card (\"Not set up\" until the desktop feature exists). Today's dot and one notification a day (the backup slot of the 4) also warn when a store passes its warning level.",
+   "status": "passing",
+   "verification": [
+    "npx tsc --noEmit -p tsconfig.json && npx vitest run src/core/dataCenter.test.ts src/renderer/src/web/dataUsage.test.ts",
+    "SMOKE_ONLY=\"Data center\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: tsc clean; 24 unit tests (sizes, thresholds, forecast on a pinned clock, samples, clean-up plans never drop unseen deletion marks); smoke: the new Data center step and the 4 moved Data safety steps pass.",
+   "notes": "core/dataCenter.ts; renderer/datacenter/{DataCenter.tsx,usage.ts,actions.ts,dataCenter.css}; web/dataUsage.ts; bridge data.usage / sizeSamples / devicesSeen; desktop IPC data:usage; settings data_size_samples, data_devices_seen; SyncFolderStatus in shared/api.ts. Deletion marks are counted, never dropped (DECISIONS.md). The cloud meter is an estimate; Turso row reads are not measured. No server or bot change."
   }
  ]
 }

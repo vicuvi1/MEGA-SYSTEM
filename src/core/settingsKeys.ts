@@ -111,6 +111,8 @@ export interface FocusRunning {
 export const SETTINGS = {
   // ---- sync and system ----
   data_version: num('bumped on every write; devices refresh when it changes'),
+  data_size_samples: json<{ day: string; sizes: Record<string, number> }[]>('Data center: one size sample a day of each synced copy and the Life tables, for the "how long is it enough" forecast (core/dataCenter.ts addSample; at most about 100 small entries)', []),
+  data_devices_seen: json<Record<string, { name: string; at: number; apps: Record<string, number | null> }>>('Data center: per device, when the server last confirmed each app copy (read before any deletion mark may be dropped; core/dataCenter.ts prunableTombstones)', {}),
   coach_tick_at: num('old place of the tick clock (now in sys_kv); never written to settings'),
   pin_hash: text('old device PIN hash (the PIN lives on the server now)'),
   theme: text('the app look (dark / light)'),

@@ -174,6 +174,24 @@ export function Sidebar({ page, onPage, collapsed, onToggle, badges }: Props) {
             })}
           </div>
           <button
+            className={`sb-item sb-more ${page === 'data' ? 'on' : ''}`}
+            style={{ ['--c' as string]: '#6EE7D8' }}
+            data-testid="sb-data-center"
+            aria-label="Data center"
+            aria-current={page === 'data' ? 'page' : undefined}
+            onClick={() => go('data')}
+            onMouseEnter={(e) => showTip('Data center: space left, backups, sync and clean-up', e.currentTarget)}
+            onMouseLeave={() => setTip(null)}
+            title="Data center: how safe your data is, how much room is left, backups, sync and clean-up"
+          >
+            {page === 'data' && <span className="sb-active" />}
+            <span className="sb-tile">
+              <Icon name="shield" size={17} duo={page === 'data'} />
+              {badges.data && <i className={`sb-dot ${badges.data.dot ?? ''}`} />}
+            </span>
+            <span className="sb-label sb-name">Data center</span>
+          </button>
+          <button
             className="sb-item sb-more"
             style={{ ['--c' as string]: 'var(--muted)' }}
             data-testid="sb-modules-link"

@@ -283,6 +283,13 @@ try {
   })
 
   const open = (page) => pg.evaluate((p) => window.dispatchEvent(new CustomEvent('life-open-page', { detail: p })), page)
+  // The Data center page on one of its tabs (backups, restore and the sync status moved there from Settings → Data safety, 2026-11-18).
+  const toDataCenter = async (tab) => {
+    await open('data')
+    await pg.waitForSelector(`[data-testid="data-center"] .ptabs [data-tab="${tab}"]`, { timeout: 15000 })
+    await pg.click(`[data-testid="data-center"] .ptabs [data-tab="${tab}"]`)
+    await pg.waitForSelector(`[data-testid="data-center"] [data-tabpanel="${tab}"]:not([hidden])`, { timeout: 5000 })
+  }
   // The island as a quiet helper (Simple mode, owner 2026-11-11): the closed pill shows the 3 numbers, the open island
   // only records things in one tap, and a must-do ticked there updates Today. The island page draws the app's real
   // numbers (the page's own bridge, the soak hook); the tick it sends is run the way the desktop runs it.
@@ -9248,12 +9255,116 @@ try {
     }
   })
 
-  // Money sync (2026-11-13): Settings → Data safety lists each app's sync (Money, Sport Track…) with the last time the
-  // server confirmed it; "Sync Money now" compares Money with the cloud copy, sends anything missing and says so.
-  await step('Settings → Data safety: Sync Money now compares Money with the cloud and shows a result line', async () => {
+  // Data center (2026-11-18): one page for your data. The health line and the 4 numbers, a bar per place the data lives
+  // (with its limit), "how long is it enough", the Sync folder slot, and the controls. A clean-up asks in the page, saves a
+  // backup first and can be undone. Settings → Data safety now only links here.
+  await step('Data center: health line, space bars with limits, how long it is enough, sync now, and a clean-up with a backup first and Undo', async () => {
+    const DC = '[data-testid="data-center"]'
+    const tab = async (id) => {
+      await pg.click(`${DC} .ptabs [data-tab="${id}"]`)
+      await pg.waitForSelector(`${DC} [data-tabpanel="${id}"]:not([hidden])`, { timeout: 5000 })
+    }
+    const meter = (id) => pg.evaluate(([dc, m]) => { const e = document.querySelector(`${dc} [data-testid="dc-meter-${m}"]`); return e ? { level: e.dataset.level, used: Number(e.dataset.used), text: e.textContent } : null }, [DC, id])
+    const BEFORE = 'life_sync_app_sync_man_before_restore'
+    await pg.evaluate((k) => localStorage.removeItem(k), BEFORE)
+    // From the sidebar, and from Settings → Data safety (which only links here now).
     await open('settings')
     await pg.waitForSelector('.st-item', { timeout: 10000 })
     await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+    await pg.waitForSelector('[data-testid="open-data-center"]', { timeout: 15000 })
+    if (await pg.locator('.st-body [data-testid="data-safety"], .st-body [data-testid="sync-panel"]').count()) throw new Error('Settings still shows the backups or sync panel (it should only link to the Data center)')
+    await pg.click('[data-testid="open-data-center"]')
+    await pg.waitForSelector(`${DC} [data-tabpanel="overview"]:not([hidden])`, { timeout: 15000 })
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 10000 })
+    await pg.click('[data-testid="sb-data-center"]')
+    await pg.waitForSelector(DC, { timeout: 15000 })
+    await tab('overview')
+    // Overview: the health line (measured, not "loading") and the 4 numbers.
+    await pg.waitForFunction((dc) => ['ok', 'warn', 'red'].includes(document.querySelector(`${dc} [data-testid="dc-health"]`)?.dataset.level), DC, { timeout: 30000 })
+    const health = (await pg.textContent(`${DC} [data-testid="dc-health"]`)).trim()
+    if (!/ · last backup .+ · synced .+/.test(health)) throw new Error(`the health line says: ${health}`)
+    if ((await pg.locator(`${DC} [data-testid="dc-numbers"] > div`).count()) !== 4) throw new Error('the overview does not show 4 numbers')
+    if (/…/.test(await pg.textContent(`${DC} [data-testid="dc-numbers"]`))) throw new Error(`a number is still loading: ${await pg.textContent(`${DC} [data-testid="dc-numbers"]`)}`)
+    // Sync now: Life's tables and every app, with a result line.
+    await pg.click(`${DC} [data-testid="dc-sync-go"]`)
+    await pg.waitForSelector(`${DC} [data-testid="dc-sync-result"]`, { timeout: 60000 })
+    const synced = (await pg.textContent(`${DC} [data-testid="dc-sync-result"]`)).trim()
+    if (!/^Synced/.test(synced)) throw new Error(`Sync now said: ${synced}`)
+    // Space: a bar for each place, measured, with the limits.
+    await tab('space')
+    await pg.waitForSelector(`${DC} [data-testid="dc-meter-local"]`, { timeout: 30000 })
+    for (const id of ['sync:app_sync_finance', 'sync:sport_tracker_json', 'sync:app_sync_waky', 'sync:app_sync_man', 'settings', 'local', 'life', 'cloud']) {
+      const m = await meter(id)
+      if (!m) throw new Error(`no bar for ${id}`)
+      if (!['ok', 'warn', 'red'].includes(m.level)) throw new Error(`${id} has level ${m.level}`)
+    }
+    const [money, local, lifeT] = [await meter('sync:app_sync_finance'), await meter('local'), await meter('life')]
+    if (!/of 4\.5 MB/.test(money.text)) throw new Error(`Money's bar does not show the 4.5 MB limit: ${money.text}`)
+    if (!(local.used > 0) || !/of 5\.0 M characters/.test(local.text)) throw new Error(`app storage bar: ${local.text}`)
+    if (!(lifeT.used > 0)) throw new Error(`Life tables measure ${lifeT.used}`)
+    if (local.level !== 'ok') throw new Error(`app storage is ${local.level} on made-up data (${local.text})`)
+    // How long: one plain sentence per limit, with what it rests on.
+    await tab('long')
+    const lines = await pg.locator(`${DC} [data-testid="dc-forecasts"] li`).allTextContents()
+    if (lines.length < 6) throw new Error(`only ${lines.length} forecasts`)
+    for (const l of lines) if (!/(reaches its limit in about|not enough history yet|is not growing|more than 30 years|is at its limit now)/.test(l)) throw new Error(`forecast says: ${l}`)
+    // Sync: the app list, and the Sync folder slot says "Not set up" where there is none.
+    await tab('sync')
+    await pg.waitForSelector(`${DC} [data-testid="sync-panel"]`, { timeout: 15000 })
+    if (!/Not set up/.test(await pg.textContent(`${DC} [data-testid="sync-folder-slot"]`))) throw new Error('the Sync folder note does not say "Not set up"')
+    // A store past its warning level: a made-up 3.1 million character copy "from before a restore" (62% of app storage).
+    await pg.evaluate((k) => localStorage.setItem(k, JSON.stringify({ at: '2026-11-01T10:00:00.000Z', restore: 'made-up', raw: 'x'.repeat(3_100_000) })), BEFORE)
+    try {
+      await open('today')
+      await pg.waitForSelector('.td2', { timeout: 10000 })
+      await open('data')
+      await tab('space')
+      await pg.waitForFunction((dc) => document.querySelector(`${dc} [data-testid="dc-meter-local"]`)?.dataset.level === 'warn', DC, { timeout: 30000 }).catch(async () => {
+        throw new Error(`app storage did not turn amber: ${JSON.stringify(await meter('local'))}`)
+      })
+      await tab('overview')
+      await pg.waitForFunction((dc) => /^Filling up: .*App storage on this device/.test(document.querySelector(`${dc} [data-testid="dc-health"]`)?.textContent?.trim() ?? ''), DC, { timeout: 15000 }).catch(async () => {
+        throw new Error(`the health line says: ${await pg.textContent(`${DC} [data-testid="dc-health"]`)}`)
+      })
+      // Clean up: it says what it frees, asks in the page, saves a backup first, and Undo puts it back.
+      await tab('clean')
+      const row = `${DC} [data-testid="dc-before-restore"]`
+      await pg.waitForFunction((r) => /MAN \(2026-11-01\): frees 3\.1 MB/.test(document.querySelector(r)?.textContent ?? ''), row, { timeout: 15000 }).catch(async () => {
+        throw new Error(`the clean-up row says: ${await pg.textContent(row)}`)
+      })
+      await pg.click(`${row} [data-testid="dc-before-restore-go"]`)
+      if (!/backup with this copy inside is saved first/.test(await pg.textContent(`${row} .dc-confirm`))) throw new Error('the clean-up does not say a backup is saved first')
+      if ((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) == null) throw new Error('the copy went before the confirmation')
+      await pg.click(`${row} [data-testid="dc-before-restore-yes"]`)
+      await pg.waitForFunction((r) => /Cleared \(3\.1 MB freed\)\. Backup saved first/.test(document.querySelector(r)?.textContent ?? ''), row, { timeout: 45000 }).catch(async () => {
+        throw new Error(`clearing said: ${await pg.textContent(row)}`)
+      })
+      if ((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) != null) throw new Error('the copy is still there after clearing')
+      await pg.click(`${row} [data-testid="dc-before-restore-undo"]`)
+      await pg.waitForFunction((r) => /The copy is back/.test(document.querySelector(r)?.textContent ?? ''), row, { timeout: 15000 })
+      if (((await pg.evaluate((k) => localStorage.getItem(k), BEFORE)) ?? '').length < 3_100_000) throw new Error('Undo did not put the copy back')
+      if (process.env.DATA_SHOT) {
+        await tab('space')
+        await pg.waitForTimeout(700)
+        await pg.screenshot({ path: process.env.DATA_SHOT })
+        await tab('clean')
+      }
+    } finally {
+      await pg.evaluate((k) => localStorage.removeItem(k), BEFORE)
+    }
+    // Download one part of the data: Life's tables as a JSON file.
+    const [dl] = await Promise.all([pg.waitForEvent('download', { timeout: 30000 }), pg.locator(`${DC} [data-testid="dc-downloads"] button`, { hasText: 'Life tables' }).click()])
+    if (!/^life-system-tables-\d{4}-\d{2}-\d{2}\.json$/.test(dl.suggestedFilename())) throw new Error(`the download is named ${dl.suggestedFilename()}`)
+    await tab('overview')
+    await open('today')
+    await pg.waitForSelector('.td2', { timeout: 10000 })
+  })
+
+  // Money sync (2026-11-13): the Data center's Sync tab (was Settings → Data safety) lists each app's sync (Money, Sport Track…) with the last time the
+  // server confirmed it; "Sync Money now" compares Money with the cloud copy, sends anything missing and says so.
+  await step('Data center → Sync (Data safety): Sync Money now compares Money with the cloud and shows a result line', async () => {
+    await toDataCenter('sync')
     await pg.waitForSelector('[data-testid="sync-money-now"]', { timeout: 15000 })
     await pg.click('[data-testid="sync-money-now"]')
     const RESULT = '[data-testid="sync-money-result"]'
@@ -9264,23 +9375,19 @@ try {
     await pg.waitForFunction(() => /Money: synced/.test(document.querySelector('[data-testid="app-sync"]')?.textContent ?? ''), null, { timeout: 30000 }).catch(async () => {
       throw new Error(`the Money line says: ${await pg.textContent('[data-testid="app-sync"]').catch(() => 'nothing')}`)
     })
-    // Stays on Settings: the next step opens Data safety itself (going to Today and straight back is lost in the page change).
+    // Stays on the Data center: the next step opens its own tab.
   })
 
   // Weekly backup check (2026-11-13) is a desktop feature (needs the backup folder): the website shows no "Last backup check" row.
-  await step('Settings → Backups: the weekly backup check row is desktop only', async () => {
-    await open('settings')
-    await pg.waitForSelector('.st-item', { timeout: 10000 })
-    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+  await step('Data center → Backups (Data safety): the weekly backup check row is desktop only', async () => {
+    await toDataCenter('backups')
     await pg.waitForSelector('[data-testid="data-safety"]', { timeout: 15000 })
     if (await pg.locator('[data-testid="backup-check"]').count()) throw new Error('the website shows the desktop backup check row')
   })
 
   // Sync history (2026-11-13): "Show history" lists this device's last sync events per app, newest first, in plain words.
-  await step('Settings → Data safety: Sync history lists the Money sync just made', async () => {
-    await open('settings')
-    await pg.waitForSelector('.st-item', { timeout: 10000 })
-    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+  await step('Data center → Sync (Data safety): Sync history lists the Money sync just made', async () => {
+    await toDataCenter('sync')
     await pg.waitForSelector('[data-testid="sync-money-now"]', { timeout: 15000 })
     await pg.click('[data-testid="sync-money-now"]')
     await pg.waitForFunction(() => /cloud up to date|Not synced/.test(document.querySelector('[data-testid="sync-money-result"]')?.textContent ?? ''), null, { timeout: 30000 })
@@ -9295,13 +9402,11 @@ try {
   // Data safety (2026-11-12): one light per copy, the size, "Back up now" (the cloud backup in parts),
   // "Export everything" (one zip of CSV + JSON) and "Restore from file" (that zip back in, after a
   // "before restore" backup that then shows under "Undo to before…"). The website has no local backup: amber, never red.
-  await step('Settings → Data safety shows every backup light, backs up, exports everything as one zip and restores it from a file', async () => {
+  await step('Data center → Backups (Data safety) shows every backup light, backs up, exports everything as one zip and restores it from a file', async () => {
     const DS = '[data-testid="data-safety"]'
     const light = (id) => pg.getAttribute(`${DS} [data-testid="safety-row-${id}"]`, 'data-light')
     const toDataSafety = async () => {
-      await open('settings')
-      await pg.waitForSelector('.st-item', { timeout: 10000 })
-      await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
+      await toDataCenter('backups')
       await pg.waitForSelector(`${DS} [data-testid="safety-row-drill"]`, { timeout: 15000 })
     }
     await toDataSafety()
@@ -9341,15 +9446,15 @@ try {
   // Sync folder (2026-11-18, desktop only): a live copy of all data in a folder you choose. The website shows nothing;
   // the desktop app (a stand-in here: the real folder work is unit-tested) shows it Off until a folder is chosen, then
   // the status, the versions and a preview before a restore.
-  await step('Settings → Data safety: the Sync folder is hidden on the website; in the desktop app it is off until a folder is chosen, then lists versions with a preview', async () => {
-    // The step before ends on Today: a page change made straight after another one can be lost, so ask until Settings is there.
+  await step('Data center → Sync (Data safety): the Sync folder is hidden on the website; in the desktop app it is off until a folder is chosen, then lists versions with a preview', async () => {
+    // The step before ends on Today: a page change made straight after another one can be lost, so ask until the Data center is there.
     for (let i = 0; i < 5; i++) {
       await pg.waitForTimeout(700)
-      await open('settings')
-      if (await pg.locator('.st-item', { hasText: 'Data safety' }).first().waitFor({ timeout: 6000 }).then(() => true, () => false)) break
+      await open('data')
+      if (await pg.locator('[data-testid="data-center"] .ptabs [data-tab="sync"]').first().waitFor({ timeout: 6000 }).then(() => true, () => false)) break
     }
-    await pg.locator('.st-item', { hasText: 'Data safety' }).first().click()
-    await pg.waitForSelector('[data-testid="data-safety"]', { timeout: 15000 })
+    await toDataCenter('sync')
+    await pg.waitForSelector('[data-testid="sync-panel"]', { timeout: 15000 })
     if (await pg.$('[data-testid="sync-folder"]')) throw new Error('the website shows the desktop-only Sync folder panel')
     await open('today')
     const dp = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage()
@@ -9387,9 +9492,10 @@ try {
       await dp.fill('input', '1234')
       await dp.keyboard.press('Enter')
       await dp.waitForSelector('.td2', { timeout: 20000 })
-      await dp.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'settings' })))
-      await dp.waitForSelector('.st-item', { timeout: 10000 })
-      await dp.locator('.st-item', { hasText: 'Data safety' }).first().click()
+      // The Sync folder lives in the Data center's Sync tab (moved there with the rest of Data safety).
+      await dp.evaluate(() => window.dispatchEvent(new CustomEvent('life-open-page', { detail: 'data' })))
+      await dp.waitForSelector('[data-testid="data-center"] .ptabs [data-tab="sync"]', { timeout: 15000 })
+      await dp.click('[data-testid="data-center"] .ptabs [data-tab="sync"]')
       const SF = '[data-testid="sync-folder"]'
       await dp.waitForSelector(`${SF} [data-testid="sync-folder-status"][data-light="off"]`, { timeout: 15000 })
       if ((await dp.textContent(`${SF} [data-testid="sync-folder-chip"]`)) !== 'Off') throw new Error('the sync folder is not off before a folder is chosen')

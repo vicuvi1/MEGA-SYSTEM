@@ -2,7 +2,7 @@ import type { IconName } from './Icon'
 
 export type PageId =
   | 'today' | 'focus' | 'progress' | 'goals' | 'calendar' | 'coach' | 'tasks' | 'schedule' | 'sleep' | 'discipline' | 'body' | 'money' | 'shop' | 'journey'
-  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom' | 'locker' | 'study'
+  | 'history' | 'rules' | 'connected' | 'settings' | 'bots' | 'notebook' | 'music' | 'season' | 'career' | 'custom' | 'locker' | 'study' | 'data'
 
 export interface ModuleDef {
   id: PageId
@@ -40,7 +40,8 @@ export const SYSTEM_PAGES: ModuleDef[] = [
   { id: 'history', label: 'History', icon: 'list', color: 'var(--muted)', phase: 0, blurb: 'Every point in and out' },
   { id: 'connected', label: 'Connected apps', icon: 'link', color: 'var(--muted)', phase: 0, blurb: 'Waky, Finance Helper and MAN' },
   { id: 'bots', label: 'Telegram bots', icon: 'bot', color: '#00D2FF', phase: 0, blurb: 'Your Telegram bots: Mega, Finance and Waky' },
-  { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN, bots, connections, backups and look' }
+  { id: 'data', label: 'Data center', icon: 'shield', color: '#6EE7D8', phase: 0, blurb: 'How safe your data is, how much room is left and for how long, backups, sync and clean-up' },
+  { id: 'settings', label: 'Settings', icon: 'gear', color: 'var(--muted)', phase: 0, blurb: 'PIN, bots, connections, the Data center and look' }
 ]
 
 export const MODULE_LABEL: Record<string, string> = {

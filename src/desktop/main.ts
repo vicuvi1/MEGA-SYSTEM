@@ -2,7 +2,7 @@ import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, nativeImage, net,
 import { budgetCheck, sleepReminderDue, slotOfId, type BudgetLedger } from '../core/notifyBudget'
 import { calendarDay, dayKey } from '../core/dates'
 import { clipWorthSaving } from '../core/islandActions'
-import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises'
+import { copyFile, mkdir, readFile, rename, stat, writeFile } from 'node:fs/promises'
 import { appendFileSync, existsSync } from 'node:fs'
 import { join, resolve, sep } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -201,6 +201,8 @@ if (firstCopy) void app.whenReady().then(async () => {
   handle('backups:open', (w: unknown) => backups.open(where(w)))
   // Sync folder (2026-11-18): a live copy of all data in a folder you choose (off until chosen). Never needs the server.
   const syncFolder = registerSyncFolder({ userData: dir, dbFile: file, beforeRead: () => saves, win, handle, smoke })
+  // Data center: how big this PC's database file is.
+  handle('data:usage', async () => ({ dbBytes: await stat(file).then((s) => s.size).catch(() => null), dbFile: file }))
   // Your Obsidian vault (read-only): titles, headings and first lines.
   const vault = createVault(dir)
   handle('vault:choose', () => vault.choose(win))

@@ -1,7 +1,8 @@
 # Recovery: how to get your data back
 
 One page. Your data is in four places (five with a sync folder), and any one of them is enough to get everything back.
-Settings → **Data safety** shows how fresh each one is (green, amber or red).
+The **Data center** page (bottom of the sidebar; Settings → Data safety links to it) shows how fresh each one is
+(green, amber or red) on its **Backups** tab, and how much room your data has left on **Space** and **How long**.
 
 | Copy | Where | How often | Kept |
 |---|---|---|---|
@@ -12,7 +13,7 @@ Settings → **Data safety** shows how fresh each one is (green, amber or red).
 | **Off-site copy** | GitHub → Actions → Off-site backup → Artifacts (encrypted) | weekly (Mondays) | 90 days |
 
 Every restore first saves a backup of how things are now, so a restore can itself be undone
-(Settings → Data safety → "Undo to before restore").
+(Data center → Backups → "Undo to before restore").
 
 ## The owner must do this once
 - Put **`BACKUP_PASSPHRASE`** in a password manager. Without it the off-site copies can't be opened.
@@ -20,11 +21,11 @@ Every restore first saves a backup of how things are now, so a restore can itsel
 - Check that `CRON_SECRET` is set in GitHub Actions too (the weekly job needs it).
 
 ## 1. Undo a recent mistake (fastest)
-Settings → Data safety → **Undo to before…** lists every backup made before a restore, an import,
+Data center → Backups → **Undo to before…** lists every backup made before a restore, an import,
 a big delete or a big change of an app's data (Finance, Sport Track, Waky, MAN). Click the one you want.
 
 ## 2. From the backup on this PC
-- In the app: Settings → Data safety → **Daily backups on this PC** → Restore, or **Restore from file**
+- In the app: Data center → Backups → **Daily backups on this PC** → Restore, or **Restore from file**
   and pick any `life-system-*.zip` (or the `backup.json` inside it).
 - Without the app: the `.zip` opens with any zip tool. `backup.json` is plain JSON (every table and
   every app's data); `life-system.sqlite` opens in any SQLite viewer (for example DB Browser for SQLite);
@@ -34,13 +35,13 @@ a big delete or a big change of an app's data (Finance, Sport Track, Waky, MAN).
 ## 2b. From the sync folder (also on a new PC)
 The sync folder holds a live copy of everything, written a few seconds after every change, even while the server is down.
 Each `life-sync-<time>.zip` in `Life System Sync/<PC name>/` is one complete copy (the time in the name is UTC).
-- **On this PC:** Settings → Data safety → **Sync folder** → pick a version → **Preview** (date, rows, apps; the files are
+- **On this PC:** Data center → Sync → **Sync folder** → pick a version → **Preview** (date, rows, apps; the files are
   checked against their SHA-256 first) → **Restore this version**. A backup of today is saved first.
 - **On a new PC:**
   1. Install the cloud-drive app (OneDrive, Google Drive, Dropbox) and wait until the `Life System Sync` folder is there,
      or plug in the USB drive.
   2. Install Life System and sign in.
-  3. Settings → Data safety → Sync folder → choose the same folder. The old PC's versions show in the list
+  3. Data center → Sync → Sync folder → choose the same folder. The old PC's versions show in the list
      (under the old PC's name); the new PC writes into its own sub-folder and never changes the old one's files.
   4. Preview the newest version of the old PC → Restore this version.
   5. If the copies are encrypted (`.zip.enc`): press "Enter the passphrase to open encrypted copies" and type the
@@ -53,7 +54,7 @@ Each `life-sync-<time>.zip` in `Life System Sync/<PC name>/` is one complete cop
   nothing is lost on the PC meanwhile.
 
 ## 3. From a cloud backup
-Settings → Data safety → **Cloud backups** → Restore (one of the last 30 days). A big backup is stored
+Data center → Backups → **Cloud backups** → Restore (one of the last 30 days). A big backup is stored
 in parts; the app joins them and checks every part's SHA-256 before anything changes.
 
 ## 4. From the off-site copy (when the cloud is gone)
@@ -63,11 +64,11 @@ in parts; the app joins them and checks every part's SHA-256 before anything cha
    openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in life-backup-YYYY-MM-DD.json.gz.enc \
      -pass pass:'<BACKUP_PASSPHRASE from your password manager>' | gunzip > backup.json
    ```
-3. Life System → Settings → Data safety → **Restore from file** → `backup.json`.
+3. Life System → Data center → Backups → **Restore from file** → `backup.json`.
    If the cloud database itself is new and empty, first sign in once so the app creates the tables.
 
 ## 5. Export everything (to keep or to move)
-Settings → Data safety → **Export everything**: one zip with the full JSON, every table as CSV and every
+Data center → Backups → **Export everything**: one zip with the full JSON, every table as CSV and every
 app's data as JSON and CSV. Restore from file takes this zip too. PINs, keys and tokens are never in it.
 
 ## What a restore does
@@ -80,14 +81,21 @@ app's data as JSON and CSV. Restore from file takes this zip too. PINs, keys and
   copy from before next to it (`life_sync_<app>_before_restore` in its storage).
 
 ## If Money (or another app) looks different on two devices
-Settings → Data safety → Sync lists each app with the last time the cloud confirmed it. Press **Sync Money now**
+Data center → Sync lists each app with the last time the cloud confirmed it. Press **Sync Money now**
 on the device that has the records: it compares with the cloud copy and sends what is missing
 ("Sent 37 records · cloud up to date"), then the other device gets them on its next sync. Records are only ever
 added or updated by a sync, never dropped. "Skipped (Money locked)" means Money is encrypted with a PIN on that
 device, so it can't sync from there.
 
+## If the Data center says a store is filling up
+- **A synced copy (usually Money) near 4.5 MB:** one request can't carry more, and a copy that is too big would stop
+  that app's sync. Tell your helper while it is amber (2.5 MB): the fix is in code (splitting the copy), not a button.
+- **App storage on this device near 5 million characters:** Data center → Clean up → clear the copy from before a
+  restore (a backup with it inside is saved first; Undo puts it back) and the app caches.
+- Nothing in Clean up removes your records. Deletion marks are kept on purpose.
+
 ## If a light is red
-- **Cloud backup:** Settings → Data safety → Back up now. Still red: the line says why (often the server
+- **Cloud backup:** Data center → Backups → Back up now. Still red: the line says why (often the server
   or the internet). Your data is safe in the main database and on this PC.
 - **Backup on this PC:** the folder may be full or gone: Change folder, then Back up now.
 - **Off-site copy:** GitHub → Actions → Off-site backup → the failed run. Usually a missing secret.

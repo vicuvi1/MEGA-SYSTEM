@@ -42,6 +42,7 @@ const api: DesktopApi = {
     onWant: (cb) => void ipcRenderer.on('syncFolder:want', () => cb()),
     onChanged: (cb) => void ipcRenderer.on('syncFolder:changed', () => cb())
   },
+  dataUsage: () => ipcRenderer.invoke('data:usage'),
   vaultChoose: () => ipcRenderer.invoke('vault:choose'),
   vaultScan: () => ipcRenderer.invoke('vault:scan'),
   vaultForget: () => ipcRenderer.invoke('vault:forget'),

@@ -70,6 +70,8 @@
 /* The module switch: one quiet "Modules" link under the menu opens Settings → Modules (Sidebar.tsx). */
 .sb-more { margin-top: 14px; padding-top: 10px; border-top: 1px solid rgb(var(--ink) / 0.06); height: 46px; color: var(--muted); }
 .sb-more .sb-name { color: var(--muted); }
+/* Data center, then Modules: one separator above the pair. */
+.sb-more + .sb-more { margin-top: 0; padding-top: 0; border-top: 0; height: 42px; }
 
 /* Collapse button: top-right when open, bottom of the dock when slim. */
 .sb-toggle {

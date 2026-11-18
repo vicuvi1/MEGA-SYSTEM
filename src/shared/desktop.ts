@@ -123,6 +123,8 @@ export interface DesktopApi {
   openBackupFolder?(where: BackupWhere): Promise<void>
   // ---- sync folder: a live copy of all data in a folder you choose (optional: older desktops don't have it) ----
   syncFolder?: import('./api').SyncFolderIpc
+  /** Data center: the size of this PC's database file (life-local.sqlite) and where it is. */
+  dataUsage?(): Promise<{ dbBytes: number | null; dbFile: string }>
   // ---- your Obsidian vault, read-only (optional: older desktops don't have it) ----
   vaultChoose?(): Promise<import('../plugins/notes/vault').VaultData | null>
   vaultScan?(): Promise<import('../plugins/notes/vault').VaultData | null>

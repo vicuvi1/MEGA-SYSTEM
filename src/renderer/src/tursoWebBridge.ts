@@ -20,7 +20,9 @@ import sqlWasmUrl from 'sql.js/dist/sql-wasm.wasm?url'
 import type { Bridge } from './bridge'
 import { createMockApi } from './mock'
 import { addDays, calendarDay, dayKey } from '@core/dates'
-import type { BodyState, BotBridgeConfig, ConnectionsState, DisciplineState, Summary } from '@shared/api'
+import type { BodyState, BotBridgeConfig, ConnectionsState, DataDeviceSeen, DataSample, DisciplineState, Summary } from '@shared/api'
+import { addSample } from '@core/dataCenter'
+import { dbUsage } from './web/dataUsage'
 import { Mirror, indexedDbStore } from './web/mirror'
 import { createBoostApi } from './web/boostStore'
 import { TursoHttp } from './web/tursoHttp'
@@ -188,6 +190,15 @@ const readJson = <T>(key: string): T | null => {
     return raw ? (JSON.parse(raw) as T) : null
   } catch {
     return null
+  }
+}
+
+/** A JSON setting, or `fallback` when it is missing or can't be read. */
+const readJsonSetting = <T,>(db: Parameters<typeof getSetting>[0], key: string, fallback: T): T => {
+  try {
+    return (JSON.parse(getSetting(db, key) || 'null') as T | null) ?? fallback
+  } catch {
+    return fallback
   }
 }
 
@@ -2144,6 +2155,32 @@ export function createTursoWebBridge(): Bridge {
       exportJson: async (): Promise<string> => JSON.stringify(await snapshot(), null, 2),
       /** A full backup saved before a risky step (restore, import, bulk delete, re-price…); throws when it could not be saved. */
       backupBeforeRisk: (label: string) => backupBeforeRisk(label),
+      // Data center (2026-11-18): sizes read from this device's copy; the two small synced settings it keeps.
+      usage: async () => (await mirrorP).read((db) => dbUsage(db)),
+      sizeSamples: async (add?: DataSample) => {
+        const read = (db: Parameters<typeof getSetting>[0]) => readJsonSetting<DataSample[]>(db, 'data_size_samples', [])
+        if (!add) return (await svcP).read((s) => read(s.db))
+        return (await svcP).write((s) => {
+          const cur = read(s.db)
+          // One write a day: today's sample is only added once (every device measures the same synced copies).
+          if (Array.isArray(cur) && cur.some((x) => x?.day === add.day)) return cur
+          const next = addSample(Array.isArray(cur) ? cur : [], add)
+          setSetting(s.db, 'data_size_samples', JSON.stringify(next))
+          return next
+        })
+      },
+      devicesSeen: async (add?: DataDeviceSeen) => {
+        const read = (db: Parameters<typeof getSetting>[0]) => readJsonSetting<Record<string, Omit<DataDeviceSeen, 'id'>>>(db, 'data_devices_seen', {})
+        const list = (m: Record<string, Omit<DataDeviceSeen, 'id'>>) => Object.entries(m ?? {}).map(([id, d]) => ({ id, ...d }))
+        if (!add) return list(await (await svcP).read((s) => read(s.db)))
+        return (await svcP).write((s) => {
+          const cur = read(s.db)
+          const { id, ...mine } = add
+          const next = { ...(cur && typeof cur === 'object' ? cur : {}), [id]: mine }
+          setSetting(s.db, 'data_devices_seen', JSON.stringify(next))
+          return list(next)
+        })
+      },
       /** What Settings → Data safety shows about the cloud copies (the local one comes from the desktop app). */
       safety: async () => {
         const [h, list] = await Promise.all([readHealth(turso).catch(() => null), bridge.data.cloudSnapshots!().catch(() => [])])

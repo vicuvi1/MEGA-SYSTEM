@@ -663,3 +663,8 @@ entry that says why.
   up plain numbers…"); writing a plain copy when encryption is on; recreating a missing chosen folder; keeping the
   passphrase in the folder, the database or a settings key.
 
+
+### The Data center measures and cleans device extras; deletion marks are never dropped (2026-11-18)
+- The Data center only removes things that are not your records: old change-history entries (device-only), the copy kept from before a restore (after a backup with it inside), and file caches. Each asks in the page and can be undone where that means anything.
+- **Deletion marks (Money's `deleted`, other tombstones) are counted but not pruned.** Finance's merge takes the union of both sides' marks, so a mark dropped on one device comes back from the next copy, and a device that was offline since before the deletion would bring the record back. `prunableTombstones` (core/dataCenter.ts) already answers "which are safe" (older than 90 days and every device in `data_devices_seen` confirmed Money since) for the day the merge itself supports dropping them (a shared "pruned before" mark). Don't add a prune button before that.
+- Limits shown are the hard ones (4.5 MB a request, about 5 million characters of app storage), the forecast uses the fastest growth it knows, and the cloud bar is an estimate that assumes Turso's free plan. No new `api/` file: sizes come from each device's own copy.

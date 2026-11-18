@@ -1,19 +1,19 @@
 // Settings → Data safety (LT11: split out of pages/Settings.tsx; the state lives in useSettingsState).
-// The backups, restore and export live in safety/DataSafetyPanel.tsx (2026-11-12).
+// The backups, restore, export and the sync status are in the Data center page now (2026-11-18,
+// datacenter/DataCenter.tsx shows safety/DataSafetyPanel.tsx, the check row below and SyncPanel);
+// this section only links there, so nothing is shown twice.
 import { useEffect, useState } from 'react'
 import { features } from '../bridge'
 import { checkLine } from '@core/weeklyBackupCheck'
 import { checkBackupNow, readWeeklyCheck } from '../safety/weeklyCheck'
 import { onSafety } from '../safety/safetyState'
-import { DataSafetyPanel } from '../safety/DataSafetyPanel'
-import { SyncFolderPanel } from '../safety/SyncFolderPanel'
 import { Icon } from '../Icon'
-import { SyncPanel } from '../SyncPanel'
+import { openTab } from '../PageTabs'
 import { timeAgo } from '../ui'
 import type { SettingsState } from './useSettingsState'
 
 /** Desktop only: "Last backup check: 10 Nov · OK (backup from 9 Nov, 4,210 rows)" and a Check now button. */
-function BackupCheckRow() {
+export function BackupCheckRow() {
   const desk = typeof window !== 'undefined' ? window.desktop : undefined
   const [note, setNote] = useState(readWeeklyCheck)
   const [busy, setBusy] = useState(false)
@@ -51,10 +51,25 @@ export function BackupsSection({ s }: { s: SettingsState }) {
   const { syncCfg, setSyncCfg, syncTestMsg, syncingNow, showSyncSecret, setShowSyncSecret, syncInstructionsOpen, setSyncInstructionsOpen, saveSyncConfig, testSyncConnection, pullSyncNow } = s
   return (
         <>
-      <DataSafetyPanel />
-      <SyncFolderPanel />
-      <BackupCheckRow />
-      <SyncPanel />
+      <section className="panel" data-testid="data-center-link">
+        <header className="panel-head">
+          <h2>
+            <Icon name="shield" /> Data center
+          </h2>
+        </header>
+        <p className="muted bk-note">Backups, restore, undo, export everything, the sync status, how much room your data has left and what can be cleaned up are on one page now: the Data center.</p>
+        <div className="bk-row">
+          <button className="btn primary" data-testid="open-data-center" onClick={() => openTab('data', 'overview')}>
+            Open the Data center
+          </button>
+          <button className="btn" onClick={() => openTab('data', 'backups')}>
+            Backups and restore
+          </button>
+          <button className="btn" onClick={() => openTab('data', 'sync')}>
+            Sync
+          </button>
+        </div>
+      </section>
       {features.cloudflareSync && (
       <section className="panel">
         <header className="panel-head">

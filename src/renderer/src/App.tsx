@@ -115,6 +115,7 @@ const CalendarPage = lazyNamed(() => import('./pages/CalendarPage'), 'CalendarPa
 const Coach = lazyNamed(() => import('./pages/Coach'), 'Coach')
 const CustomCenter = lazyNamed(() => import('./pages/CustomCenter'), 'CustomCenter')
 const PhotoLocker = lazyNamed(() => import('./vault/PhotoLocker'), 'PhotoLocker')
+const DataCenter = lazyNamed(() => import('./datacenter/DataCenter'), 'DataCenter')
 const QuickHost = lazyNamed(() => import('./quick/QuickHost'), 'QuickHost')
 
 
@@ -737,12 +738,13 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
     coach: coachUnread ? { n: coachUnread } : undefined,
     discipline: checkInDue ? { dot: 'lime' } : undefined,
     shop: showCoins && shopReady && modOn('shop') ? { dot: 'lime' } : undefined,
-    settings: updateReady || backup?.lastError ? { dot: updateReady ? 'lime' : 'warn' } : undefined
+    settings: updateReady ? { dot: 'lime' } : undefined,
+    data: backup?.lastError ? { dot: 'warn' } : undefined
   }
   const alerts: Alert[] = []
   // On the desktop the title bar offers 'Restart to update' itself.
   if (updateReady && !window.desktop) alerts.push({ id: 'update', tone: 'good', icon: 'spark', title: `Version ${update!.latest} is ready`, body: 'Settings > Updates > Update now', page: 'settings' })
-  if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Today’s cloud backup didn’t save', body: backup.lastError, page: 'settings' })
+  if (backup?.lastError) alerts.push({ id: 'backup', tone: 'warn', icon: 'cloud', title: 'Today’s cloud backup didn’t save', body: backup.lastError, page: 'data' })
   if (checkInDue && modOn('discipline')) alerts.push({ id: 'checkin', tone: 'info', icon: 'shield', title: 'Check in for today', body: `Day ${dayShown(discipline!)}`, page: 'discipline' })
   if (overdue && modOn('tasks')) alerts.push({ id: 'overdue', tone: 'warn', icon: 'tasks', title: `${overdue} task${overdue > 1 ? 's are' : ' is'} overdue`, page: 'tasks' })
   // The next thing in your real calendar within the hour (T2; it read an old, empty schedule).
@@ -821,8 +823,8 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           <div className="title">
             <h1>
               {current.label}
-              {/* Data safety: a small red dot on Today only when a backup needs a look. */}
-              {page === 'today' && !isDemo && <SafetyDot onOpen={() => openSettingsTab('backups')} />}
+              {/* Data center: a small dot on Today only when a backup needs a look or a store of data is filling up. */}
+              {page === 'today' && !isDemo && <SafetyDot onOpen={() => setPage('data')} />}
             </h1>
             {!compact && <p>{page === 'today' ? new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }) : current.blurb}</p>}
           </div>
@@ -884,12 +886,12 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
           {backup && !isDemo && (
             <button
               className={`chip ${backup.lastError ? 'warn' : 'ok'}`}
-              onClick={() => openSettingsTab('backups')}
-              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open Data safety' : 'Backed up: open Data safety'}
+              onClick={() => openTab('data', 'backups')}
+              aria-label={backup.lastError ? 'Today’s cloud backup didn’t save: open the Data center' : 'Backed up: open the Data center'}
               title={
                 backup.lastError
-                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open Data safety.`
-                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open Data safety.`
+                  ? `Today’s cloud backup didn’t save.\n${backup.lastError}\nYour data is safe; only today’s copy is missing. Click to open the Data center.`
+                  : `Cloud backup saved${backup.last?.at ? ` (${backup.last.at})` : ''}. Click to open the Data center.`
               }
             >
               <Icon name="cloud" size={15} />
@@ -984,6 +986,7 @@ function Shell({ auth, onAuth }: { auth: AuthStatus; onAuth: (a: AuthStatus) => 
             {page === 'coach' && <Coach onWallet={onWallet} />}
             {page === 'custom' && <CustomCenter />}
             {page === 'locker' && <PhotoLocker />}
+            {page === 'data' && <DataCenter onGo={setPage} />}
             {page === 'history' && <History rules={rules} onChange={onWallet} />}
             {page === 'settings' && <Settings auth={auth} onAuth={onAuth} backup={backup} onBackup={setBackup} onRestored={refresh} update={update} onUpdate={setUpdate} onGo={setPage} />}
             {current.phase > 0 && <Soon module={current} />}

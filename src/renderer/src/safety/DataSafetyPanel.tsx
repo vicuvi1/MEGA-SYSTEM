@@ -1,4 +1,4 @@
-// Settings → Data safety (2026-11-12): can your data be lost? One light per
+// Data center → Backups (was Settings → Data safety, 2026-11-12): can your data be lost? One light per
 // copy (cloud backup, backup on this PC, off-site copy) and for the last
 // restore test, the size, "Export everything", "Restore from file", the
 // backup folder, and "Undo to before X" for every backup made before a risky step.
@@ -8,7 +8,8 @@ import { askConfirm } from '../confirmSheet'
 import { life } from '../bridge'
 import { Icon } from '../Icon'
 import { useAction } from '../ui'
-import { backupNow, testLocalRestore } from '../DesktopBackups'
+import { backUpEverywhere } from '../datacenter/actions'
+import { testLocalRestore } from '../DesktopBackups'
 import { backupTextOf, download, exportEverything } from './backupFiles'
 import { listRiskPoints, readRiskPoint, type RiskPoint } from './riskPoints'
 import { loadSafety, loadSql, onSafety, safetyChanged, type SafetyState } from './safetyState'
@@ -33,7 +34,7 @@ export function DataSafetyPanel() {
     })
   }, [reload])
 
-  const run = async (key: string, fn: () => Promise<unknown>, done?: string) => {
+  const run = async <T,>(key: string, fn: () => Promise<T>, done?: string | ((out: T) => string)) => {
     setBusy(key)
     const out = await act(fn, done)
     setBusy(null)
@@ -41,17 +42,7 @@ export function DataSafetyPanel() {
     return out
   }
 
-  const backUp = () =>
-    run(
-      'backup',
-      async () => {
-        if (desk?.writeBackup) await backupNow()
-        if (!(await life.data.saveDailySnapshot?.())) {
-          if (!desk?.writeBackup) throw new Error('The cloud backup did not save: see the line above')
-        }
-      },
-      desk?.writeBackup ? 'Backed up on this PC and in the cloud' : 'Backed up in the cloud'
-    )
+  const backUp = () => run('backup', backUpEverywhere, (said) => said)
 
   const exportAll = () =>
     run(
