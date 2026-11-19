@@ -1265,8 +1265,10 @@ try {
   await (await import('./smokeMoneyB2.mjs')).moneyB2Steps({ step, pg, open, financeFrame, resetClock: fakeNow })
   // Money ideas B: quick add, salary watch, price memory and Ask about your money (e2e/smokeMoneyIdeasB.mjs).
   await (await import('./smokeMoneyIdeasB.mjs')).moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx })
-  // Money long-term: repeating records, the monthly check-up, week / year / trip budgets and the Year summary (e2e/smokeMoneyLong.mjs).
+  // Money long-term: repeating records, week / year / trip budgets and the Year summary (e2e/smokeMoneyLong.mjs).
   await (await import('./smokeMoneyLong.mjs')).moneyLongSteps({ step, pg, open, financeFrame, storedTx })
+  // Money reality check: the full window, causes, one honest adjustment, Check these (e2e/smokeMoneyReality.mjs).
+  await (await import('./smokeMoneyReality.mjs')).moneyRealitySteps({ step, pg, open, financeFrame })
   // Sport Track's Today: one hero with the next step, big exercise cards (one
   // quick-add, Done, ⋯), water with glass / bottle / undo; taps reach the one log.
   // UX5: a finished workout (Sport Track's SPORT_SUMMARY) gets Ben's one plain line, once.

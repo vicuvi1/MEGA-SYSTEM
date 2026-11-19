@@ -30,6 +30,7 @@ import * as Tidy from './screens/moneytidy.js';
 import * as CashCount from './screens/cashcount.js';
 import * as Repeating from './screens/repeating.js';
 import * as Checkup from './screens/checkup.js';
+import * as RealityScreen from './screens/reality.js';
 import * as Shortcuts from './shortcuts.js';
 import * as Bulk from './bulk.js';
 import { backupBefore } from './dupes.js';
@@ -555,6 +556,8 @@ function renderSidebar() {
   badge('log', todayCount ? `${todayCount} today` : '', 'soft');
   badge('goals', gs.target && gs.ratio > 0 ? `${Math.round(gs.ratio * 100)}%` : '', 'gold');
   badge('telegram', Telegram.isLinked?.() ? '● On' : '', 'soft');
+  const rc = Checkup.badge(today);
+  badge('reality', rc.text, rc.kind);
 
   const ambState = AmbientMusic.getState();
   const currentTrack = AmbientMusic.TRACKS.find((t) => t.id === ambState.track) || AmbientMusic.TRACKS[0];
@@ -1142,8 +1145,7 @@ function viewHome() {
   ${MoneyB.askBox()}
   ${stepsCard(today)}
   ${payCard(today)}
-  ${CashCount.card(today)}
-  ${Checkup.card(today)}
+  ${Checkup.card(today) || CashCount.card(today)}
   ${homeStrip(s, key)}
   ${Spending.spendingCard({ key: 'home', period: ui.spendPeriod })}
   ${Goals.homeCard({ featured: true })}
@@ -3330,6 +3332,9 @@ function onSettingsChange(el) {
     else if (key === 'sound') { st.sound = el.checked; if (st.sound) sound.test(state); }
     else if (key === 'checkupOn') st.checkupOn = el.checked;
     else if (key === 'checkupDay') st.checkupDay = Math.max(1, Math.min(28, Math.round(Number(v)) || 1));
+    else if (key === 'checkupEvery') { if (['week', '2weeks', 'month'].includes(v)) st.checkupEvery = v; render(); }
+    else if (key === 'checkupWeekday') st.checkupWeekday = Math.max(0, Math.min(6, Math.round(Number(v)) || 0));
+    else if (key === 'checkupTime') { if (/^([01]\d|2[0-3]):[0-5]\d$/.test(v)) st.checkupTime = v; }
     else if (key === 'cashCountOn') st.cashCountOn = el.checked;
     else if (key === 'cashCountDay') st.cashCountDay = Math.max(0, Math.min(6, Math.round(Number(v)) || 0));
     else if (key === 'everydayLimit') st.everydayLimit = Math.max(0, evalAmount(v) || 0);
@@ -3477,7 +3482,7 @@ document.addEventListener('click', (e) => {
   else if (Reconcile.onClick(act, el)) { /* monthly reconciliation */ }
   else if (Tidy.onClick(act)) { /* duplicates, refund suggestions, rate update */ }
   else if (CashCount.onClick(act, el)) { /* weekly cash count card */ }
-  else if (Checkup.onClick(act)) { /* monthly check-up */ }
+  else if (Checkup.onClick(act, el)) { /* reality check card and settings */ }
   else if (Money3.onClick(act, el)) { /* favourites and the emergency fund */ }
   else if (act === 'sq-chip-x') { ui.search = withoutTerm(ui.search, Number(el.dataset.i), state); render(); }
   else if (act === 'shortcuts-help') Shortcuts.openHelp();
@@ -3786,6 +3791,7 @@ const SCREENS = {
   calendar: MoneyCalendar,
   wishlist: Wishlist,
   changes: ChangesScreen,
+  reality: RealityScreen,
   rates: RatesScreen,
   telegram: TelegramHub,
   bot: TelegramHub,
@@ -4131,6 +4137,7 @@ requestPersistence();
 if (!DEMO) Security.initLock();
 MoneyB.init();
 ChangesScreen.init();
+RealityScreen.init();
 Recent.init();
 SavedBar.init();
 GridEdit.init();

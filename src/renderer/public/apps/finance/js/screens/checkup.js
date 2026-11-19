@@ -1,75 +1,73 @@
-// Monthly check-up (js/checkup.js): a card on Home when it is due, the
-// Check-up sheet ("Does your bank show X?" per account) and its settings.
+// Reality check (js/checkup.js, js/reality.js): the Home card when a check is due
+// (or when new records need a look), the sidebar badge and the settings card.
+// The check itself happens in the full Reality check window (#reality,
+// js/screens/reality.js).
 
 import { ctx, esc } from '../ctx.js';
 import * as C from '../checkup.js';
-import { accountBalances } from '../model.js';
-import { evalAmount, formatMoney } from '../money.js';
+import { guardFlags, setAcctEvery } from '../reality.js';
 import { todayISO, dayLabel } from '../dates.js';
+import { DAY_NAMES } from '../cashcount.js';
+
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
 
 export function card(today = todayISO()) {
+  if (ctx.state._sealed) return '';
   const due = C.checkupCard(ctx.state, today);
-  if (!due) return '';
-  return `<section class="card" data-testid="checkup-card"><h2>Monthly check-up</h2>
-    <p style="margin-top:0">Time to compare ${due.left.length === 1 ? 'one account' : `${due.left.length} accounts`} with your bank. It takes a minute.</p>
-    <div class="btns"><button type="button" class="btn primary" data-act="checkup-open" data-testid="checkup-open">Start check-up</button><button type="button" class="btn" data-act="checkup-later">Not today</button></div></section>`;
+  const flags = guardFlags(ctx.state, today).length;
+  const flagLine = flags ? `<p class="muted small" data-testid="reality-flag-count">${plural(flags, 'new record looks', 'new records look')} unusual. Nothing was changed: check ${flags === 1 ? 'it' : 'them'} in the window.</p>` : '';
+  if (due) {
+    return `<section class="card rc-home${due.overdue ? ' overdue' : ''}" data-testid="checkup-card"><h2>Reality check${due.overdue ? ' <span class="rc-tag alert" data-testid="reality-overdue">Overdue</span>' : ''}</h2>
+    <p style="margin-top:0">Compare ${plural(due.left.length, 'account', 'accounts')} with your bank, so the money in the app is the real money. It takes a few minutes.</p>${flagLine}
+    <div class="btns"><button type="button" class="btn primary" data-act="checkup-open" data-testid="checkup-open">Start reality check</button><button type="button" class="btn" data-act="checkup-later">Not today</button></div></section>`;
+  }
+  if (!flags) return '';
+  return `<section class="card rc-home" data-testid="reality-flags-card"><h2>Check these</h2>${flagLine}
+    <div class="btns"><button type="button" class="btn" data-act="checkup-open" data-testid="reality-flags-open">Check ${flags === 1 ? 'it' : 'them'}</button></div></section>`;
+}
+
+/** The sidebar badge: accounts due ("Overdue" when 2 days late), else the records to check. */
+export function badge(today = todayISO()) {
+  if (ctx.state._sealed) return { text: '', kind: '' };
+  const due = C.checkupDue(ctx.state, today);
+  if (due) return { text: due.overdue ? 'Overdue' : String(due.left.length), kind: due.overdue ? 'alert' : 'soft' };
+  const flags = guardFlags(ctx.state, today).length;
+  return { text: flags ? String(flags) : '', kind: 'soft' };
 }
 
 export function settingsCard() {
   const c = C.checkupConfig(ctx.state);
   const days = Array.from({ length: 28 }, (_, i) => i + 1);
-  return `<section class="card"><h2>Monthly check-up</h2>
-    <p class="muted small" style="margin-top:0">Once a month Money asks, for each account, whether your bank shows the same balance. A difference becomes one visible adjustment that doesn't count as income or spending. Life System also sends one reminder that day.</p>
-    <label class="motion-setting"><span><b>Remind me to check my accounts</b></span><input type="checkbox" data-set="checkupOn" ${c.on ? 'checked' : ''} aria-label="Monthly check-up"></label>
-    <label class="field" style="margin:10px 0 0"><span>Day of the month</span><select data-set="checkupDay" aria-label="Check-up day">${days.map((d) => `<option value="${d}"${d === c.day ? ' selected' : ''}>${d}</option>`).join('')}</select></label>
-    <div class="btns" style="margin-top:10px"><button type="button" class="btn" data-act="checkup-open">Check my accounts now</button></div></section>`;
-}
-
-function sheetHTML() {
-  const { state } = ctx;
-  const today = todayISO();
-  const bal = accountBalances(state, today);
-  const start = `${today.slice(0, 7)}-01`;
-  const rows = C.checkupAccounts(state).map(({ account: a, last }) => {
-    const done = last && last >= start;
-    return `<div class="card" style="margin:0 0 10px" data-testid="checkup-row" data-acc="${esc(a.id)}">
-      <b>${esc(a.name)}</b> <span class="muted small">${last ? `last checked ${esc(dayLabel(last))}` : 'never checked'}</span>
-      ${done ? '<p class="muted small" style="margin:6px 0 0">✓ Checked this month</p>' : `<p style="margin:6px 0">Does your bank show <b>${esc(formatMoney(bal[a.id] || 0, a.currency))}</b>?</p>
-      <div class="cash-count-row"><button type="button" class="btn primary" data-act="checkup-yes" data-id="${esc(a.id)}" data-testid="checkup-yes">Yes</button>
-      <input type="text" inputmode="decimal" data-checkup-real aria-label="Real balance of ${esc(a.name)}" placeholder="Enter the real balance" data-testid="checkup-real">
-      <button type="button" class="btn" data-act="checkup-set" data-id="${esc(a.id)}" data-testid="checkup-set">Save</button></div>`}
-    </div>`;
+  const next = C.nextCheck(ctx.state, todayISO());
+  const own = Object.entries(c.acctEvery).map(([id, every]) => {
+    const a = ctx.state.settings.accounts.find((x) => x.id === id);
+    return a ? `<li>${esc(a.name)}: ${esc(C.EVERY_LABEL[every].toLowerCase())} <button type="button" class="btn sm" data-act="rc-acct-normal" data-id="${esc(id)}">Back to the usual</button></li>` : '';
   }).join('');
-  return `<h3>Monthly check-up <button type="button" class="icon-btn" data-close aria-label="Close">✕</button></h3>${rows || '<p class="muted">No accounts to check.</p>'}`;
+  return `<section class="card"><h2>Reality check</h2>
+    <p class="muted small" style="margin-top:0">Money asks you to compare each account with your bank. A difference first shows what could explain it; what is left becomes one visible adjustment that doesn't count as income or spending. Life System sends one notification when it is due, and one reminder 2 days later if you skipped it.${next ? ` Next check: ${esc(dayLabel(next))}.` : ''}</p>
+    <label class="motion-setting"><span><b>Remind me to check my accounts</b></span><input type="checkbox" data-set="checkupOn" ${c.on ? 'checked' : ''} aria-label="Reality check reminders"></label>
+    <div class="rc-set-grid">
+      <label class="field"><span>How often</span><select data-set="checkupEvery" aria-label="How often" data-testid="reality-every">${C.EVERY.map((e) => `<option value="${e}"${e === c.every ? ' selected' : ''}>${C.EVERY_LABEL[e]}</option>`).join('')}</select></label>
+      <label class="field"${c.every === 'month' ? ' hidden' : ''}><span>Day of the week</span><select data-set="checkupWeekday" aria-label="Reality check day of the week">${DAY_NAMES.map((n, i) => `<option value="${i}"${i === c.weekday ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
+      <label class="field"${c.every === 'month' ? '' : ' hidden'}><span>Day of the month</span><select data-set="checkupDay" aria-label="Check-up day">${days.map((d) => `<option value="${d}"${d === c.day ? ' selected' : ''}>${d}</option>`).join('')}</select></label>
+      <label class="field"><span>From</span><input type="time" data-set="checkupTime" value="${esc(c.time)}" aria-label="Reality check time"></label>
+    </div>
+    ${own ? `<p class="muted small" style="margin:10px 0 4px">Checked more often:</p><ul class="rc-own">${own}</ul>` : ''}
+    <div class="btns" style="margin-top:10px"><button type="button" class="btn" data-act="checkup-open">Open reality check</button></div></section>`;
 }
 
 export function open() {
-  ctx.openSheet(sheetHTML(), (sheet) => {
-    sheet.addEventListener('click', (e) => {
-      const yes = e.target.closest('[data-act="checkup-yes"]');
-      const set = e.target.closest('[data-act="checkup-set"]');
-      if (!yes && !set) return;
-      const id = (yes || set).dataset.id;
-      const acc = ctx.state.settings.accounts.find((a) => a.id === id);
-      if (!acc) return;
-      const today = todayISO();
-      let real = null;
-      if (set) {
-        real = evalAmount(set.closest('[data-testid="checkup-row"]').querySelector('[data-checkup-real]').value);
-        if (real == null || !Number.isFinite(real)) { ctx.toast('Type the balance your bank shows, e.g. 1250 or 1000+250'); return; }
-      }
-      const rate = acc.currency === ctx.state.settings.currency ? 1 : ctx.suggestedRate?.(acc.currency);
-      if (!rate) { ctx.toast(`No ${acc.currency} rate yet. Update rates first.`); return; }
-      const r = C.applyCheckup(ctx.state, id, real, today, { rate });
-      ctx.commit();
-      ctx.toast(!r.tx ? `${acc.name}: same as your bank` : `${acc.name}: adjusted by ${formatMoney(Math.abs(r.diff), acc.currency, { sign: r.diff > 0 })}`);
-      sheet.innerHTML = `<div class="grab"></div>${sheetHTML()}`;
-    });
-  });
+  if (location.hash === '#reality') ctx.render(); else location.hash = '#reality';
 }
 
-export function onClick(act) {
+export function onClick(act, el) {
   if (act === 'checkup-open') { open(); return true; }
+  if (act === 'rc-acct-normal') {
+    setAcctEvery(ctx.state, el.dataset.id, null);
+    ctx.commit();
+    ctx.toast('Back to the usual interval', 'Undo', () => ctx.undo?.());
+    return true;
+  }
   if (act === 'checkup-later') {
     C.snoozeCheckup(ctx.state, todayISO());
     ctx.commit();

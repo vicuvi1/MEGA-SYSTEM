@@ -99,17 +99,17 @@ describe('repeating records: due, idempotent across devices', () => {
 })
 
 describe('monthly check-up', () => {
-  it('is due from the chosen day until every account is checked this month; off or snoozed is quiet', () => {
-    const s = mk()
-    expect(C.checkupDue(s, '2026-11-18')).toMatchObject({ month: '2026-11' })
+  it('monthly: due from the chosen day until every account is checked for this month; off or snoozed is quiet', () => {
+    const s = mk([], { settings: { checkupEvery: 'month' } })
+    expect(C.checkupDue(s, '2026-11-18')).toMatchObject({ month: '2026-11', cycle: '2026-11-01' })
     expect(C.checkupDue(s, '2026-11-18').left.length).toBe(s.settings.accounts.length)
-    s.settings.checkupDay = 20
-    expect(C.checkupDue(s, '2026-11-18')).toBeNull()
-    expect(C.checkupDue(s, '2026-11-20')).not.toBeNull()
-    s.settings.checkupDay = 1
     for (const a of s.settings.accounts) C.applyCheckup(s, a.id, null, '2026-11-18')
     expect(C.checkupDue(s, '2026-11-25')).toBeNull()
     expect(C.checkupDue(s, '2026-12-01')).not.toBeNull()
+    s.settings.checkupDay = 20
+    expect(C.checkupDue(s, '2026-12-01')).toBeNull()
+    expect(C.checkupDue(s, '2026-12-20')).not.toBeNull()
+    s.settings.checkupDay = 1
     s.settings.checkupOn = false
     expect(C.checkupDue(s, '2026-12-01')).toBeNull()
     s.settings.checkupOn = true
@@ -143,19 +143,19 @@ describe('monthly check-up', () => {
     const r = C.applyCheckup(s, 'eur', 800, '2026-11-18', { rate: 20 })
     expect(r.tx).toMatchObject({ type: 'expense', amount: 200, currency: 'EUR', rate: 20, base: 4000, notSpending: true })
   })
-  it('the reminder: one bell entry a month, once, in the budget slot', async () => {
+  it('the reminder: one bell entry per cycle, in the budget slot', async () => {
     expect(slotOfId('budget:checkup:2026-11-18')).toBe('checkup')
-    expect(slotText('checkup', { mustDone: 0, mustTotal: 0 })).toContain('check-up')
-    expect(checkupNotice('2026-11-18', new Date(), [])?.id).toBe('budget:checkup:2026-11-18')
-    expect(checkupInBell(['budget:checkup:2026-11-02'], '2026-11')).toBe(true)
-    expect(checkupNotice('2026-11-18', new Date(), ['budget:checkup:2026-11-02'])).toBeNull()
+    expect(slotText('checkup', { mustDone: 0, mustTotal: 0 })).toContain('reality check')
+    expect(checkupNotice('2026-11-15', new Date(), [], '2026-11-18')?.id).toBe('budget:checkup:2026-11-18')
+    expect(checkupInBell(['budget:checkup:2026-11-16'], '2026-11-15')).toBe(true)
+    expect(checkupNotice('2026-11-15', new Date(), ['budget:checkup:2026-11-17'], '2026-11-18')).toBeNull()
     const m = new Map<string, string>([['finance-helper.state', JSON.stringify(mk())]])
     const store = { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) }
     const added: any[] = []
-    const deps = { store, add: async (x: any) => void added.push(x), bellIds: async () => [] as string[], now: new Date('2026-11-18T12:00:00') }
+    const deps = { store, add: async (x: any) => void added.push(x), bellIds: async () => [] as string[], now: new Date('2026-11-18T20:00:00') }
     expect(await checkCheckup(deps)).not.toBeNull()
     expect(await checkCheckup(deps)).toBeNull()
-    expect(m.get(CHECKUP_SENT_KEY)).toBe('2026-11')
+    expect(JSON.parse(m.get(CHECKUP_SENT_KEY)!)).toEqual({ cycle: '2026-11-15', days: ['2026-11-18'] })
     expect(added.length).toBe(1)
   })
 })

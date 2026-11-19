@@ -33873,7 +33873,8 @@ var LOCAL_SETTINGS = [
 var BY_ID = [
 	"wishlist",
 	"savedViews",
-	"customFields"
+	"customFields",
+	"realityHistory"
 ];
 /** "Last done on" days: the later day wins, whoever saved last. */
 var LATER_DAY = ["cashCountLast", "checkupSnooze"];
@@ -75427,7 +75428,7 @@ function slotText(slot, f) {
 		case "backup": return "Life System: a backup needs a look. Open Settings → Data safety.";
 		case "salary": return "Life System: your salary is not in yet. Open Money.";
 		case "budgetwarn": return "Life System: a Money budget is nearly used up. Open Money.";
-		case "checkup": return "Life System: time for your monthly Money check-up. Open Money.";
+		case "checkup": return "Life System: time for your Money reality check. Open Money.";
 	}
 }
 /** Reads the `simple_mode` setting's budget part (missing = on, afternoon off). */

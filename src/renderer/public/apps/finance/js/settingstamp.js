@@ -15,7 +15,7 @@
 /** Device-only settings: never travel. */
 export const LOCAL_SETTINGS = ['theme', 'themeInLife', 'themeMotion', 'logView'];
 /** Settings lists merged item by item (id + updatedAt, deletions in state.deleted). */
-export const BY_ID = ['wishlist', 'savedViews', 'customFields'];
+export const BY_ID = ['wishlist', 'savedViews', 'customFields', 'realityHistory'];
 /** "Last done on" days: the later day wins, whoever saved last. */
 export const LATER_DAY = ['cashCountLast', 'checkupSnooze'];
 /** Keys with their own merge in sync.js. */

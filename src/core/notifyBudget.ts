@@ -17,7 +17,7 @@
 // day here and once a month from Finance Helper (core/salaryNotice.ts).
 // Money's budget warnings (2026-11-17, 80% and 100% of a category's budget) are one of the 4 too: slot
 // 'budgetwarn', no fixed time, at most once a day; each warning once per category and month (core/budgetNotice.ts).
-// Money's monthly check-up reminder (2026-11-18) is one of the 4 too: slot 'checkup', no fixed time, once a month
+// Money's reality check reminder (2026-11-18, every 2 weeks by default since 2026-11-19) is one of the 4 too: slot 'checkup', no fixed time, at most twice a cycle
 // (core/checkupNotice.ts).
 // Everything else is silent and in the app only (the bell). Not pushes, so not
 // counted: timers you started yourself (a focus or study block ending, the rest
@@ -151,7 +151,7 @@ export function slotText(slot: PushSlot, f: { mustDone: number; mustTotal: numbe
     case 'budgetwarn':
       return "Life System: a Money budget is nearly used up. Open Money."
     case 'checkup':
-      return 'Life System: time for your monthly Money check-up. Open Money.'
+      return 'Life System: time for your Money reality check. Open Money.'
   }
 }
 

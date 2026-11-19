@@ -1,8 +1,9 @@
-// Money's monthly check-up reminder, app side (2026-11-18). Reads this device's Money data (plain only:
-// locked Money is never opened here), asks Finance Helper (apps/finance/js/checkup.js) whether the
-// check-up is due (the day has come and an account is not yet checked this month) and adds one bell
-// entry a month (core/checkupNotice.ts). Runs a little after start, after every app sync, and every
-// 30 minutes. Settings → Monthly check-up in Money switches it off (settings.checkupOn).
+// Money's reality check reminder, app side (2026-11-19, was the monthly check-up). Reads this device's
+// Money data (plain only: locked Money is never opened here), asks Finance Helper
+// (apps/finance/js/checkup.js) whether a check is due by now (every 2 weeks by default, from the chosen
+// time) and adds one bell entry per cycle, plus one gentle reminder 2 days later (core/checkupNotice.ts).
+// Runs a little after start, after every app sync, and every 30 minutes. Settings → Reality check in
+// Money switches it off (settings.checkupOn).
 import { dayKey } from '@core/dates'
 import { checkupNotice } from '@core/checkupNotice'
 import type { Notif } from '@core/notify'
@@ -12,7 +13,7 @@ import { normalizeState } from '../../public/apps/finance/js/model.js'
 import { checkupDue } from '../../public/apps/finance/js/checkup.js'
 import { hostStore } from '../web/bigStore'
 
-/** The month this device already sent its reminder for. */
+/** What this device sent for the running cycle: { cycle, days }. */
 export const CHECKUP_SENT_KEY = 'life_checkup_sent'
 const FINANCE_KEY = 'finance-helper.state'
 
@@ -31,14 +32,18 @@ export async function checkCheckup(d: CheckupDeps): Promise<Omit<Notif, 'readAt'
   try { raw = JSON.parse(store.getItem(FINANCE_KEY) || 'null') } catch { return null }
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { tx?: unknown }).tx)) return null
   const day = dayKey(d.now)
-  const month = day.slice(0, 7)
-  try { if (store.getItem(CHECKUP_SENT_KEY) === month) return null } catch { /* the bell's own check still stops a repeat */ }
-  if (!checkupDue(normalizeState(raw), day)) return null
-  const ids = await d.bellIds().catch(() => [] as string[])
-  const n = checkupNotice(day, d.now, ids)
+  const hhmm = `${String(d.now.getHours()).padStart(2, '0')}:${String(d.now.getMinutes()).padStart(2, '0')}`
+  const due = checkupDue(normalizeState(raw), day, hhmm) as { cycle: string } | null
+  if (!due) return null
+  // What this device already sent this cycle counts like what is in the bell (the bell may have been cleared).
+  let sent: { cycle?: string; days?: string[] } = {}
+  try { sent = JSON.parse(store.getItem(CHECKUP_SENT_KEY) || '{}') || {} } catch { /* an old month value: start fresh */ }
+  const mine = sent.cycle === due.cycle && Array.isArray(sent.days) ? sent.days : []
+  const ids = [...(await d.bellIds().catch(() => [] as string[])), ...mine.map((x) => `budget:checkup:${x}`)]
+  const n = checkupNotice(due.cycle, d.now, ids, day)
   if (!n) return null
   await d.add(n)
-  try { store.setItem(CHECKUP_SENT_KEY, month) } catch { /* private window */ }
+  try { store.setItem(CHECKUP_SENT_KEY, JSON.stringify({ cycle: due.cycle, days: [...mine, day] })) } catch { /* private window */ }
   return n
 }
 

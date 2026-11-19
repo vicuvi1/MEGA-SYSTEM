@@ -735,3 +735,9 @@ entry that says why.
 - **Rules out:** reading or writing these keys through plain localStorage; removing the localStorage copy before the read-back check or before the mark; replacing Money's data with a copy found later instead of merging; reporting "saved" without `flush()`; a second implementation of the store; moving `finance-helper.head` or the mark into IndexedDB.
 - Tests: `web/moneyStore.test.ts` (25), `web/bigStore.test.ts`, the perf table (`moneyScale.perf.test.ts`), smoke "Data center → Space: Money on this device moves to IndexedDB…" (in the release set) and the offline step with both storages full.
 
+
+### Reality check: the app suggests, the owner decides; the guard never blocks (2026-11-19)
+- Owner: "All money data coming into the app must be real and correct", checked every 2 weeks against the bank.
+- **Nothing is changed without a tap.** A difference first lists likely causes; the only thing the app adds by itself after the owner's tap is ONE adjustment record per account, marked `notIncome` / `notSpending` (so totals stay honest), noted "Reality check <day>", through the normal save (Change history, Undo, sync). It never edits or deletes an existing record.
+- **The real-data guard flags, it does not block or rewrite.** Suspicious incoming records (bot, quick add, import, sync, phone pay) go to "Check these"; "It's right" is a normal edit (`guardOk`). Rules out: rejecting a record, holding it back from sync, or changing its amount, date or currency automatically.
+- **One feature, not three:** the monthly check-up became the Reality check (same keys `checkupOn` / `checkupLast` / `checkupSnooze`, same bell slot `checkup`, at most 2 entries a cycle); the weekly cash count stays but hides while a check is due. Details: `docs/areas/rewards-money.md` → Reality check.

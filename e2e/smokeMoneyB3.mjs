@@ -121,7 +121,7 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
       st.tx = st.tx.filter((t) => t.note !== 'Cash count');
       const w = st.settings.accounts.find((a) => a.kind === 'cash' && !a.archived);
       if (!w) st.settings.accounts.push({ id: 'smoke-b3-cash', name: 'Cash', kind: 'cash', currency: 'MDL', start: 50000, emoji: '💵', color: 2, updatedAt: Date.now() });
-      st.settings.cashCountOn = true; st.settings.cashCountDay = new Date().getDay(); delete st.settings.cashCountLast; st.settings.updatedAt = Date.now();
+      st.settings.cashCountOn = true; st.settings.cashCountDay = new Date().getDay(); delete st.settings.cashCountLast; st.settings.checkupOn = false; st.settings.updatedAt = Date.now(); // a due reality check hides the cash count card (it asks for cash too)
     `)
     try {
       const frame = await financeFrame()

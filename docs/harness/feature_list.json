@@ -1753,6 +1753,21 @@
    ],
    "evidence": "2026-11-18: 25 new unit tests (move, verify before delete, interrupted, fallback, merge instead of replace, two windows, events, closing page, readers, backup and restore round trip, offline queue); tsc clean; full vitest and full smoke green; perf table at 40,000 records.",
    "notes": "One store, plain JS, shared by Life and Finance Helper: public/apps/finance/js/bigstore.js; web/bigStore.ts types it (hostStore). Finance: store.js deviceStorage/storeReady, app.js awaits it before load(). Smoke steps use moneyStore (the window's store). Rules not to undo: docs/DECISIONS.md \"Money's own data lives in IndexedDB, behind one store per window\". sw cache v74."
+  },
+  {
+   "id": "money-reality-check",
+   "priority": 1,
+   "area": "rewards-money",
+   "title": "Reality check: compare the app's money with the real money every 2 weeks, fix the causes, and flag records that look wrong",
+   "user_visible_behavior": "Every 2 weeks by default (Settings: weekly / every 2 weeks / monthly, weekday or day, time) Life System sends one notification \"Time for your reality check: compare your accounts with your bank\", and one gentle reminder 2 days later if skipped; Home shows the card (Overdue tag after 2 days) and the sidebar's Reality check item a badge. The full Reality check window lists every account: app balance, a box for the real balance (its MDL value for USD/EUR), the difference, the last check, Matches, and a note counter for cash; Tab and Enter work and hidden amounts stay hidden. A difference first lists likely causes (To confirm, duplicates, exact amounts, future dates, other currencies, transfers not arrived, probably forgotten spending) with one-tap fixes; what is left can be one adjustment record (not income / not spending, \"Reality check 18 Nov\") with Undo. The window keeps a history of checks, the accuracy streak, the accounts that drift most and habit tips (cash count, repeating rule, check one account weekly). Check these: new records (bot, quick add, import, sync, phone pay) far outside their category's usual amount, dated in the future or long before they were added, in another currency than the account, exact duplicates or income with no source are listed; nothing is changed until you tap It's right or Fix.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/moneyReality.test.ts src/renderer/src/web/moneyLongTerm.test.ts",
+    "SMOKE_ONLY=\"Money reality check\" npm run smoke",
+    "SMOKE_SET=release node e2e/smoke.mjs"
+   ],
+   "evidence": "2026-11-19: 11 new unit tests (2-week cadence, skips and time with a pinned clock, notification + reminder, difference across currencies, causes, honest adjustment and Undo, fixed vs adjusted, accuracy/drift/tips, sync of the history and keys, guard rules); smoke step \"Money reality check\" green.",
+   "notes": "Extends the monthly check-up (js/checkup.js schedule, js/reality.js rules, screens/reality.js window #reality). Settings keys: checkupEvery, checkupWeekday, checkupTime, checkupAcctEvery, realityHistory (list by id, BY_ID merge). Record fields: reality (check id), guardOk. Bell slot stays 'checkup' (at most 2 a cycle). The weekly cash count card hides while a reality check is due; checking a cash account answers it. sw cache v75."
   }
  ]
 }

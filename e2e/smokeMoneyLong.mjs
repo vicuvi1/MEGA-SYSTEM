@@ -1,13 +1,13 @@
 // Money for long-term use smoke step (called from e2e/smoke.mjs): a repeating rent rule asks on its day and
-// adds once, the monthly check-up makes one adjustment that does not count as income or spending, a trip
-// budget shows up with its bar, and the Year summary matches the Log's income. Made-up data only; the
+// adds once, a trip budget shows up with its bar, and the Year summary matches the Log's income (the check-up is
+// now the Reality check: e2e/smokeMoneyReality.mjs). Made-up data only; the
 // Finance Helper state of this device is put back at the end.
 // A screenshot of the Year summary goes to MONEYLONG_SHOTS when it is set.
 
 const KEY = 'finance-helper.state'
 
 export async function moneyLongSteps({ step, pg, open, financeFrame, storedTx }) {
-  await step('Money long-term: repeating rent asks once, check-up adjustment, trip budget, Year summary', async () => {
+  await step('Money long-term: repeating rent asks once, trip budget, Year summary', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
     await open('money')
     await pg.waitForFunction(() => !!document.querySelector('.mh-open') || [...document.querySelectorAll('iframe')].some((e) => e.offsetParent), null, { timeout: 15000 })
@@ -47,20 +47,7 @@ export async function moneyLongSteps({ step, pg, open, financeFrame, storedTx })
       const made = (await storedTx()).filter((t) => t.note === 'Rent smoke')
       if (made.length !== 1 || !/^rec-.+-\d{4}-\d{2}-\d{2}$/.test(made[0].id) || made[0].amount !== 123400) throw new Error(`the rent record: ${JSON.stringify(made)}`)
 
-      // 2. The monthly check-up: a different real balance makes one visible adjustment that does not count.
-      await go('#home')
-      await frame.waitForSelector('[data-testid="checkup-card"]', { timeout: 10000 })
-      await frame.click('[data-testid="checkup-open"]')
-      await frame.waitForSelector('.sheet [data-testid="checkup-row"]', { timeout: 5000 })
-      const row = frame.locator('.sheet [data-testid="checkup-row"]').first()
-      await row.locator('[data-testid="checkup-real"]').fill('1')
-      await row.locator('[data-testid="checkup-set"]').click()
-      await frame.waitForSelector('.sheet [data-testid="checkup-row"]:has-text("Checked this month")', { timeout: 5000 })
-      await settle()
-      const adj = (await storedTx()).filter((t) => t.checkup)
-      if (adj.length !== 1 || adj[0].note !== 'Monthly check-up' || !(adj[0].type === 'income' ? adj[0].notIncome === true : adj[0].notSpending === true)) throw new Error(`check-up adjustment: ${JSON.stringify(adj)}`)
-      await frame.click('.sheet .icon-btn[data-close]')
-      await pg.waitForTimeout(400)
+      // 2. The check-up became the Reality check window: its own step (e2e/smokeMoneyReality.mjs).
 
       // 3. A trip budget for some dates and a tag.
       await go('#plan')
