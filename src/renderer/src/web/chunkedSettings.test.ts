@@ -288,7 +288,7 @@ describe('the desktop', () => {
     expect(pc.health().stuck).toHaveLength(0)
     expect(s.biggest()).toBeLessThan(1_500_000)
     expect(await (await web()).read((db) => getSetting(db as any, KEY))).toBe(v2)
-  })
+  }, 30_000) // two 40,000-record copies: over 5 s on the slower Windows runner
 })
 
 describe('an older app version can never put a whole copy over the pieces', () => {

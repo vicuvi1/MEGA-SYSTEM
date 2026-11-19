@@ -84,6 +84,9 @@ describe('Tasks sync: edits made in the app reach Todoist', () => {
   })
 
   it('due "tomorrow" and priority at once: one write', async () => {
+    // The made-up task is due 2026-11-20: on a pinned day, so "tomorrow" is a change on any day the test runs.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 10, 10, 0))
     const fake = fakeTodoistHttp()
     const c = createTodoistClient(serverCall(fake))
     await c.everything()
