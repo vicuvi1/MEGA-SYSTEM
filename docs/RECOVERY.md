@@ -96,6 +96,15 @@ device, so it can't sync from there.
 - **"Could not read … a piece is missing / damaged":** a device refused a download that did not check out; its own
   copy is untouched. Open the app on the device that has the newest Money and press **Sync Money now** there: its
   next save sends every missing piece again.
+- **Money on this device** is kept in the browser's bigger storage (IndexedDB) since 2026-11-18, so the 5 million
+  characters (about 20,000 records) no longer limit it. It moves the first time you open Money after the update: it
+  is written to the new place, read back and compared, and only then removed from the old one. Data center → Space
+  → "Money on this device" says where it is. If that line says it could not be moved, or that IndexedDB is not
+  available, Money still works from the old place with the old limit and nothing is lost: make a backup (Data center
+  → Backups) and tell your helper what the line says. A backup, a restore and "Export everything" hold Money the same
+  as before, wherever it is kept.
+- **"Could not save on this device" in Money:** the device could store the change nowhere. Keep the window open,
+  free up space on the disk, and make a backup from Settings → Backup in Money; your data is still in the window.
 - **Sync copies on this device** (the last synced copy of each app) are kept in the browser's bigger storage
   (IndexedDB), not in the 5 million characters. If that bar shows a note, the copy stayed in the small storage:
   nothing is lost, tell your helper what the note says.

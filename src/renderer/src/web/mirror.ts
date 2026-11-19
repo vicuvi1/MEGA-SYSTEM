@@ -18,6 +18,7 @@ import { decodePending, diffFrom, encodePending, requestBytes, schemaInfo, sendP
 import { READ_VERSIONS, catchUpPlan, parseVersions, repairStatements, trackStatements, versionsBefore, type TableVersions } from './tableVersions'
 import { retryDelay } from '@core/retry'
 import { APPEND_ONLY } from '@core/backupPlan'
+import { hostStore, OUTBOX_KEY } from './bigStore'
 
 // cloud_snapshots (+ their parts): 30 full backups, read straight from Turso when needed, never copied to every device.
 // restore_stage_*: a restore's staging tables (core/backupPlan.ts), gone when the restore ends.
@@ -399,7 +400,7 @@ export class Mirror {
       // Queued changes always carry the table they need (they may be sent to a fresh database).
       const queued = () => [...writeOnce(version, { create: true }), ...checks, ...changes, ...trackStatements(touched, version), mark, ...(checks.length ? [{ sql: 'DELETE FROM sys_cas', args: [] }] : [])]
       if (behind) {
-        this.queueOffline(queued())
+        await this.queueOffline(queued())
         this.persist()
         this.emit()
         return result
@@ -443,7 +444,7 @@ export class Mirror {
           // With its checks (Y3): sent later, it must still find the rows as they were read
           // here; if another device changed them meanwhile, it goes to "couldn't sync" (Y1)
           // instead of overwriting their newer edit.
-          this.queueOffline(queued())
+          await this.queueOffline(queued())
           this.persist()
           this.emit()
           return result
@@ -529,7 +530,11 @@ export class Mirror {
   }
 
   // ---- Offline queue (web): changes made without a connection --------------
-  private static OUTBOX = 'life_offline_writes'
+  // Kept in IndexedDB through the window's store (web/bigStore.ts): a waiting
+  // Money change is the whole copy, too big to sit in localStorage next to
+  // everything else. The store answers from memory; a write it could not put
+  // anywhere is said out loud below, the same way a full localStorage was.
+  private static OUTBOX = OUTBOX_KEY
   // The waiting changes live in memory too (S3): if the browser can't store
   // them (storage full, private window) they still go out from this tab, and
   // you're told plainly instead of losing them on the next reload.
@@ -544,7 +549,7 @@ export class Mirror {
     if (this.offline) return this.offline
     let raw: string | null = null
     try {
-      raw = typeof localStorage !== 'undefined' ? localStorage.getItem(Mirror.OUTBOX) : null
+      raw = hostStore()?.getItem(Mirror.OUTBOX) ?? null
     } catch {
       raw = null
     }
@@ -579,34 +584,49 @@ export class Mirror {
       return (this.sinceMem ??= Date.now())
     }
   }
-  private saveOutbox(list: Change[][]): void {
+  /**
+   * Keeps the waiting changes on this device. The list is in memory at once; the returned
+   * promise resolves when it is really stored (or could not be: then `outboxUnsaved` says so).
+   */
+  private saveOutbox(list: Change[][]): Promise<void> {
     this.offline = list
     if (!list.length) this.sinceMem = null
     else this.sinceMem ??= Date.now()
     if (this.outboxLocked) {
       // Never write over a queue we could not read nor back up.
       this.outboxUnsaved = list.length > 0
-      return
+      return Promise.resolve()
     }
     try {
-      if (typeof localStorage === 'undefined') return
+      const store = hostStore()
+      if (!store) return Promise.resolve()
       if (list.length) {
-        localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list))
-        if (!localStorage.getItem(Mirror.SINCE)) localStorage.setItem(Mirror.SINCE, String(this.sinceMem))
+        store.setItem(Mirror.OUTBOX, JSON.stringify(list))
+        // Only a note of since when; a full localStorage must not make the stored list look unsaved.
+        try {
+          if (!store.getItem(Mirror.SINCE)) store.setItem(Mirror.SINCE, String(this.sinceMem))
+        } catch {
+          /* kept in memory (sinceMem) */
+        }
       } else {
-        localStorage.removeItem(Mirror.OUTBOX)
-        localStorage.removeItem(Mirror.SINCE)
+        store.removeItem(Mirror.OUTBOX)
+        store.removeItem(Mirror.SINCE)
       }
       this.outboxUnsaved = false
+      // The write to IndexedDB follows: if neither it nor localStorage could take the list, say so.
+      return store.flush().catch(() => {
+        if (this.offline === list && list.length) this.outboxUnsaved = true
+      })
     } catch {
       this.outboxUnsaved = list.length > 0
+      return Promise.resolve()
     }
   }
-  private queueOffline(batch: Change[]): void {
+  private async queueOffline(batch: Change[]): Promise<void> {
     // Never trimmed: an old change is never dropped to make room (S3).
     const list = [...this.outbox(), batch]
-    this.saveOutbox(list)
-    this.lastError = this.waitingNote(list.length)
+    await this.saveOutbox(list)
+    this.lastError = this.waitingNote((this.offline ?? list).length)
     // Offline AND this browser could not store the change: it lives only in this
     // tab's memory. The screen must say so instead of "saved" (ui.tsx useAction).
     if (this.outboxUnsaved && typeof window !== 'undefined' && typeof window.dispatchEvent === 'function' && typeof CustomEvent !== 'undefined') window.dispatchEvent(new CustomEvent('life-not-stored', { detail: { waiting: list.length } }))
@@ -697,7 +717,7 @@ export class Mirror {
         sent++
       }
     }
-    this.saveOutbox(list.slice(sent))
+    void this.saveOutbox(list.slice(sent))
     if (failed) this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE })
     else {
       this.flushFails = 0

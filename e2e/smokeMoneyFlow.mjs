@@ -30,19 +30,19 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
   }
   // Put made-up data into the stored copy, then reload Finance Helper so it reads it.
   const seed = async (edit) => {
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await pg.evaluate(([k, src]) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       // eslint-disable-next-line no-new-func
       new Function('st', src)(st)
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, [KEY, edit])
     await reload()
     return original
   }
   const restore = async (original) => {
     await pg.evaluate(([k, v, t, m]) => {
-      if (v != null) localStorage.setItem(k, v)
+      if (v != null) moneyStore.setItem(k, v)
       localStorage.removeItem(t)
       localStorage.setItem(m, 'off')
     }, [KEY, original, TIPS, MOTION])
@@ -52,7 +52,7 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
     const M = await import(new URL('./js/model.js', location.href).href)
     const A = await import(new URL('./js/archive.js', location.href).href)
     const Y = await import(new URL('./js/yearreview.js', location.href).href)
-    const st = JSON.parse(localStorage.getItem('finance-helper.state'))
+    const st = JSON.parse(moneyStore.getItem('finance-helper.state'))
     // eslint-disable-next-line no-new-func
     return new Function('M', 'A', 'Y', 'st', 'a', src)(M, A, Y, M.normalizeState(st), a)
   }, [fn, arg])
@@ -100,7 +100,7 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
 
   await step('Money feel: a new row eases in, and with amounts hidden the balance never shows a digit while it counts; motion off does nothing', async () => {
     await openFinance()
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     try {
       // Motion on for this step (Calm and the smoke's off switch are put back after).
       await pg.evaluate((m) => { localStorage.setItem(m, 'on'); document.documentElement.classList.remove('calm') }, MOTION)
@@ -144,7 +144,7 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
       if (await frame.evaluate(() => window.__rowIn)) throw new Error('rows animated with motion off')
     } finally {
       await pg.evaluate((m) => localStorage.setItem(m, 'off'), MOTION)
-      if (original != null) await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+      if (original != null) await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
       await reload()
     }
   })
@@ -182,7 +182,7 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
       await frame.waitForSelector('[data-testid="archive-confirm"]', { timeout: 5000 })
       await frame.click('[data-testid="archive-confirm"]')
       await frame.waitForSelector('[data-testid="archive-state"]', { timeout: 15000 })
-      await pg.waitForFunction((k) => !!JSON.parse(localStorage.getItem(k) || '{}').settings?.archive?.cutoff, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => !!JSON.parse(moneyStore.getItem(k) || '{}').settings?.archive?.cutoff, KEY, { timeout: 6000 })
       frame = await financeFrame()
       const mid = await snap()
       if (JSON.stringify(mid.bal) !== JSON.stringify(before.bal)) throw new Error(`balances changed: ${JSON.stringify(before.bal)} -> ${JSON.stringify(mid.bal)}`)
@@ -206,7 +206,7 @@ export async function moneyFlowSteps({ step, pg, open, financeFrame }) {
       await frame.waitForSelector('[data-testid="archive-undo"]', { timeout: 6000 })
       await frame.click('[data-testid="archive-undo"]')
       await frame.waitForFunction(() => !document.querySelector('[data-testid="archive-undo"]'), null, { timeout: 8000 })
-      await pg.waitForFunction((k) => !JSON.parse(localStorage.getItem(k) || '{}').settings?.archive?.cutoff, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => !JSON.parse(moneyStore.getItem(k) || '{}').settings?.archive?.cutoff, KEY, { timeout: 6000 })
       const after = await snap()
       if (after.active !== before.active || after.archived !== 0) throw new Error(`unarchive: ${after.active} active, ${after.archived} archived (want ${before.active}, 0)`)
       if (JSON.stringify(after.bal) !== JSON.stringify(before.bal) || JSON.stringify(after.y24) !== JSON.stringify(before.y24)) throw new Error('unarchive changed balances or the year summary')

@@ -265,7 +265,8 @@ describe('6. saves wait a moment and write once', () => {
     expect(store.writes).toEqual([])
     expect(hasPendingSave()).toBe(true)
     vi.advanceTimersByTime(SAVE_DELAY + 1)
-    expect(store.writes).toEqual([KEY])
+    // One write of the data (the theme for the first paint is a small key of its own).
+    expect(store.writes.filter((k: string) => k !== 'finance-helper.paint')).toEqual([KEY])
     expect(ids(store)).toEqual(['t0', 't1', 't2', 't3', 't4'])
     expect(seen).toEqual([true])
     // flushSave writes a waiting save right away (pagehide, before reading back).
@@ -275,7 +276,7 @@ describe('6. saves wait a moment and write once', () => {
     expect(ids(store)).toContain('t5')
     expect(hasPendingSave()).toBe(false)
     vi.advanceTimersByTime(SAVE_DELAY * 2)
-    expect(store.writes).toHaveLength(2)
+    expect(store.writes.filter((k: string) => k !== 'finance-helper.paint')).toHaveLength(2)
     off()
   })
 

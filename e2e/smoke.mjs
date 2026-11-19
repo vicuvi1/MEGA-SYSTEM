@@ -114,6 +114,25 @@ const browser = await chromium.launch(process.env.CHROMIUM_PATH ? { executablePa
     // come at some hours only and would sit on top of what a step clicks. Nothing
     // here checks them; the bell and the inbox still get every notification.
     if (process.env.SMOKE_PRIVACY_FRESH === '1') await ctx.addInitScript(() => { window.__smokeFresh = true })
+    // Money's own data lives in IndexedDB, behind the app's store (web/bigStore.ts). The steps read
+    // and seed it through `moneyStore`, with the same calls they made on localStorage: it is the
+    // store of the window the step runs in (Life's page, or the Money frame), so a read is what the
+    // app reads and a seed reaches the app like another window's save (a `storage` event), as before.
+    // Before the app has started there is no store yet: then it is localStorage, the old place,
+    // which the app moves over by itself.
+    await ctx.addInitScript(() => {
+      const store = () => {
+        try {
+          if (window.__lifeStore) return window.__lifeStore
+          const host = window.parent !== window ? window.parent.__lifeStore : null
+          if (host?.forWindow) return host.forWindow(window)
+        } catch {
+          /* another site's frame */
+        }
+        return localStorage
+      }
+      window.moneyStore = { getItem: (k) => store().getItem(k), setItem: (k, v) => store().setItem(k, v), removeItem: (k) => store().removeItem(k) }
+    })
     await ctx.addInitScript(() => {
       try {
         const p = JSON.parse(localStorage.getItem('ls.ui') || '{}')
@@ -800,13 +819,13 @@ try {
     // A made-up euro account and rates (units per 1 USD: 1 EUR = 17.6 / 0.88 = 20 MDL) on this device;
     // the app sync carries them to the synced copy quick add reads.
     await pg.evaluate(() => {
-      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      const st = JSON.parse(moneyStore.getItem('finance-helper.state') || 'null')
       if (!st) throw new Error('no Finance Helper data on this device')
       const now = Date.now()
       st.settings.accounts = [...(st.settings.accounts || []).filter((a) => a.id !== 'smoke-eur'), { id: 'smoke-eur', name: 'Euroacc', kind: 'card', currency: 'EUR', updatedAt: now }]
       st.settings.updatedAt = now
       st.rates = { ...(st.rates || {}), usd: { ...(st.rates?.usd || {}), USD: 1, MDL: 17.6, EUR: 0.88 }, crypto: st.rates?.crypto || {}, history: st.rates?.history || {}, fetchedAt: now }
-      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      moneyStore.setItem('finance-helper.state', JSON.stringify(st))
       window.dispatchEvent(new CustomEvent('life-finance-changed'))
     })
     const nb = (t) => String(t || '').replace(/ /g, ' ')
@@ -842,12 +861,12 @@ try {
     await pg.waitForFunction(() => ![...document.querySelectorAll('.mh-recent li')].some((li) => /smoke tea/.test(li.textContent)), null, { timeout: 10000 }).catch(() => {})
     // Leave the euro account out of the data again (a deletion that syncs).
     await pg.evaluate(() => {
-      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      const st = JSON.parse(moneyStore.getItem('finance-helper.state') || 'null')
       if (!st) return
       st.settings.accounts = (st.settings.accounts || []).filter((a) => a.id !== 'smoke-eur')
       st.deleted = { ...(st.deleted || {}), 'smoke-eur': Date.now() }
       st.settings.updatedAt = Date.now()
-      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      moneyStore.setItem('finance-helper.state', JSON.stringify(st))
       window.dispatchEvent(new CustomEvent('life-finance-changed'))
     })
   })
@@ -980,7 +999,7 @@ try {
     await pg.waitForTimeout(1500) // let any pending save of the page finish before the data is edited
     // A made-up budget (50 lei) on the biggest row's category and a one-off record (5 000 lei), on this device.
     await frame.evaluate(() => {
-      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      const st = JSON.parse(moneyStore.getItem('finance-helper.state') || 'null')
       if (!st) throw new Error('no Finance Helper data')
       const now = Date.now()
       const day = new Date().toISOString().slice(0, 10)
@@ -989,7 +1008,7 @@ try {
       cat.updatedAt = now
       st.settings.updatedAt = now
       st.tx.push({ id: 'smoke-oneoff', type: 'expense', amount: 500000, base: 500000, currency: st.settings.currency || 'MDL', date: day, category: cat.id, account: st.settings.accounts[0].id, note: 'smoke big buy', createdAt: now, updatedAt: now })
-      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      moneyStore.setItem('finance-helper.state', JSON.stringify(st))
       setTimeout(() => location.reload(), 50)
     })
     await pg.waitForTimeout(600)
@@ -1023,12 +1042,12 @@ try {
     }
     // Put the data back.
     await frame.evaluate(() => {
-      const st = JSON.parse(localStorage.getItem('finance-helper.state'))
+      const st = JSON.parse(moneyStore.getItem('finance-helper.state'))
       st.tx = st.tx.filter((t) => t.id !== 'smoke-oneoff')
       const cat = st.settings.categories.find((c) => c.budget === 5000)
       if (cat) { cat.budget = null; cat.updatedAt = Date.now() }
       st.settings.updatedAt = Date.now()
-      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      moneyStore.setItem('finance-helper.state', JSON.stringify(st))
       localStorage.removeItem('finance-helper.spend-mode')
       setTimeout(() => location.reload(), 50)
     })
@@ -1083,7 +1102,7 @@ try {
     if (!frame) throw new Error('Finance Helper frame not loaded')
     return frame
   }
-  const storedTx = () => pg.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx)
+  const storedTx = () => pg.evaluate(() => JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx)
   await step('Money reconcile: "Reconcile: due" opens the account; a difference, one adjustment and its Undo', async () => {
     await open('money')
     // The steps before left the full app open: back to the Money hub view.
@@ -1110,12 +1129,12 @@ try {
     const before = (await storedTx()).length
     await frame.click('.sheet [data-testid="rc-adjust"]')
     await frame.waitForSelector('.sheet [data-testid="rc-adjusted"]', { timeout: 5000 })
-    await pg.waitForFunction((n) => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.length === n + 1, before, { timeout: 5000 })
+    await pg.waitForFunction((n) => JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx.length === n + 1, before, { timeout: 5000 })
     const adj = (await storedTx()).find((t) => t.reconcile)
     if (!adj || adj.note !== 'Reconciliation adjustment' || adj.amount !== 1234 || adj.type !== 'expense') throw new Error(`adjustment record: ${JSON.stringify(adj)}`)
     await frame.click('.sheet [data-testid="rc-undo"]')
     await frame.waitForSelector('.sheet [data-testid="rc-adjust"]', { timeout: 5000 })
-    await pg.waitForFunction((id) => { const st = JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}'); return !st.tx.some((t) => t.id === id) && !!st.deleted?.[id] }, adj.id, { timeout: 5000 })
+    await pg.waitForFunction((id) => { const st = JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}'); return !st.tx.some((t) => t.id === id) && !!st.deleted?.[id] }, adj.id, { timeout: 5000 })
     if ((await storedTx()).length !== before) throw new Error('Undo did not put the records back as they were')
     await frame.click('.sheet .icon-btn[data-close]')
     await pg.waitForTimeout(300)
@@ -1169,10 +1188,10 @@ try {
     if (process.env.MONEY4_SHOTS) await pg.locator('[data-testid="money-long"]').screenshot({ path: `${process.env.MONEY4_SHOTS}/money-card.png` })
     // Made-up rates on this device (units per 1 USD: 1 USD = 17.6 MDL), so USD and EUR can be shown.
     await pg.evaluate(() => {
-      const st = JSON.parse(localStorage.getItem('finance-helper.state') || 'null')
+      const st = JSON.parse(moneyStore.getItem('finance-helper.state') || 'null')
       if (!st || st.rates?.usd?.EUR > 0) return
       st.rates = { ...(st.rates || {}), usd: { ...(st.rates?.usd || {}), USD: 1, MDL: 17.6, EUR: 0.88 }, crypto: st.rates?.crypto || {}, history: st.rates?.history || {}, fetchedAt: Date.now() }
-      localStorage.setItem('finance-helper.state', JSON.stringify(st))
+      moneyStore.setItem('finance-helper.state', JSON.stringify(st))
     })
     const txBefore = JSON.stringify(await storedTx())
     // "See it all" opens Finance Helper on Reports → Long view.
@@ -1181,7 +1200,7 @@ try {
     const frame = await financeFrame()
     await frame.evaluate(() => { if (location.hash !== '#longview') location.hash = '#longview' })
     // An app opened by an earlier step still holds the rates it had: reload it once to read them.
-    if (!(await frame.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || '{}').rates?.usd?.EUR > 0 && !!document.querySelector('[data-testid="lv-currency"]')))) {
+    if (!(await frame.evaluate(() => JSON.parse(moneyStore.getItem('finance-helper.state') || '{}').rates?.usd?.EUR > 0 && !!document.querySelector('[data-testid="lv-currency"]')))) {
       await frame.evaluate(() => location.reload())
       await pg.waitForTimeout(2500)
     }
@@ -7209,8 +7228,8 @@ try {
     }
     // The made-up Finance data has spending every day: this device's copy has none today.
     const keptFinance = await pg.evaluate(() => {
-      const old = localStorage.getItem('finance-helper.state')
-      localStorage.setItem('finance-helper.state', JSON.stringify({ settings: { currency: 'MDL', categories: [], accounts: [] }, tx: [] }))
+      const old = moneyStore.getItem('finance-helper.state')
+      moneyStore.setItem('finance-helper.state', JSON.stringify({ settings: { currency: 'MDL', categories: [], accounts: [] }, tx: [] }))
       return old
     })
     try {
@@ -7234,7 +7253,7 @@ try {
       if ((await settled()) !== before) throw new Error('"Nothing spent today" paid points at the tap (it is judged at day end)')
       if (process.env.NOSPEND_SHOTS) await pg.screenshot({ path: join(process.env.NOSPEND_SHOTS, 'nothing-spent.png') })
     } finally {
-      await pg.evaluate((old) => (old === null ? localStorage.removeItem('finance-helper.state') : localStorage.setItem('finance-helper.state', old)), keptFinance)
+      await pg.evaluate((old) => (old === null ? moneyStore.removeItem('finance-helper.state') : moneyStore.setItem('finance-helper.state', old)), keptFinance)
     }
   })
   // Career (made-up data): the job board with its weekly quota, a flashcard review,
@@ -9385,6 +9404,63 @@ try {
 
   // Money sync (2026-11-13): the Data center's Sync tab (was Settings → Data safety) lists each app's sync (Money, Sport Track…) with the last time the
   // server confirmed it; "Sync Money now" compares Money with the cloud copy, sends anything missing and says so.
+  // Money's own data lives in IndexedDB (2026-11-18). It leaves localStorage the first time the new
+  // Money starts on the device: written, read back, and only then removed. Until then the bar says
+  // so; afterwards every record is still there and the small storage no longer holds it.
+  await step('Data center → Space: Money on this device moves to IndexedDB when Money is opened, with every record, and the bar says where it is', async () => {
+    const DC = '[data-testid="data-center"]'
+    const KEY = 'finance-helper.state'
+    const place = () =>
+      pg.evaluate((k) => {
+        const s = window.__lifeStore
+        const raw = s.getItem(k)
+        return { small: localStorage.getItem(k) != null, where: s.status().keys.find((x) => x.key === k)?.where ?? null, mark: localStorage.getItem('finance-helper.store'), error: s.status().error, ids: raw ? JSON.parse(raw).tx.map((t) => t.id).sort().join(',') : null, chars: raw ? raw.length : 0 }
+      }, KEY)
+    const bar = async () => {
+      await open('today')
+      await pg.waitForSelector('.td2', { timeout: 10000 })
+      await pg.click('[data-testid="sb-data-center"]')
+      await pg.waitForSelector(DC, { timeout: 15000 })
+      await pg.click(`${DC} .ptabs [data-tab="space"]`)
+      await pg.waitForSelector(`${DC} [data-testid="dc-meter-money"]`, { timeout: 30000 })
+      return pg.evaluate((dc) => { const e = document.querySelector(`${dc} [data-testid="dc-meter-money"]`); return { used: Number(e.dataset.used), level: e.dataset.level, text: e.textContent } }, DC)
+    }
+    const before = await place()
+    if (!before.ids) throw new Error('no Money data on this device')
+    if (before.mark !== 'idb') {
+      // Money was not opened in this run yet: nothing has moved, and the bar says when it will.
+      if (!before.small || before.where !== 'localStorage') throw new Error(`before Money was opened its data is not where it always was: ${JSON.stringify({ ...before, ids: undefined })}`)
+      const b = await bar()
+      if (!/localStorage/.test(b.text) || !/first time Money is opened/.test(b.text)) throw new Error(`the bar before the move says: ${b.text}`)
+    }
+    await open('money')
+    await pg.waitForTimeout(800)
+    if (await pg.$('.mh-open')) await pg.click('.mh-open')
+    await pg.waitForTimeout(1500)
+    const frame = await financeFrame()
+    await frame.waitForFunction(() => !!document.querySelector('#app')?.firstElementChild, null, { timeout: 20000 })
+    await pg.waitForFunction((k) => localStorage.getItem(k) == null && window.__lifeStore.status().keys.find((x) => x.key === k)?.where === 'indexeddb', KEY, { timeout: 15000 }).catch(async () => {
+      throw new Error(`Money did not move to IndexedDB: ${JSON.stringify({ ...(await place()), ids: undefined })}`)
+    })
+    await pg.evaluate(() => window.__lifeStore.flush())
+    const after = await place()
+    if (after.mark !== 'idb' || after.error) throw new Error(`after the move: ${JSON.stringify({ ...after, ids: undefined })}`)
+    if (after.ids !== before.ids) throw new Error(`the records changed in the move: ${before.ids.split(',').length} before, ${after.ids.split(',').length} after`)
+    // What IndexedDB itself holds (read directly, not through the store) is what the app reads.
+    const onDisk = await pg.evaluate((k) => new Promise((ok, no) => {
+      const r = indexedDB.open('life-big-store', 1)
+      r.onerror = () => no(r.error)
+      r.onsuccess = () => { const g = r.result.transaction('kv').objectStore('kv').get(k); g.onsuccess = () => { r.result.close(); ok(typeof g.result === 'string' ? g.result === window.__lifeStore.getItem(k) : false) }; g.onerror = () => no(g.error) }
+    }), KEY)
+    if (!onDisk) throw new Error('IndexedDB does not hold the text the app reads')
+    // Money itself shows the records, and reads the same store.
+    if (!(await frame.evaluate((k) => moneyStore.getItem(k) === window.parent.__lifeStore.getItem(k) && localStorage.getItem(k) == null, KEY))) throw new Error('the Money frame does not read the moved data')
+    const b = await bar()
+    if (!/IndexedDB/.test(b.text) || !/No 5 million character limit/.test(b.text)) throw new Error(`the bar after the move says: ${b.text}`)
+    if (Math.abs(b.used - after.chars) > after.chars * 0.05 + 2000) throw new Error(`the bar shows ${b.used} characters, Money has ${after.chars}`)
+    const local = await pg.evaluate((dc) => document.querySelector(`${dc} [data-testid="dc-meter-local"]`)?.textContent ?? '', DC)
+    if (!/except Money/.test(local)) throw new Error(`the app storage bar does not say Money has left it: ${local}`)
+  })
   await step('Data center → Sync (Data safety): Sync Money now compares Money with the cloud and shows a result line', async () => {
     await toDataCenter('sync')
     await pg.waitForSelector('[data-testid="sync-money-now"]', { timeout: 15000 })

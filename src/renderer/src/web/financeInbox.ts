@@ -5,6 +5,7 @@
 // so nothing is added twice). Finance Helper's own backup and sync carry it on.
 import { getSetting, setSetting } from '../../../main/settings'
 import type { Mirror } from './mirror'
+import { hostStore } from './bigStore'
 
 const SETTING = 'finance_inbox_json'
 const FINANCE_KEY = 'finance-helper.state'
@@ -274,7 +275,7 @@ function applyEntries(state: any, inbox: InboxEntry[], now: number): { state: an
   return { state: { ...state, tx: [...state.tx, ...tx] }, added: tx.length + removing.length }
 }
 
-export function createFinanceInbox(mirror: Mirror, store: Storage | null = typeof localStorage !== 'undefined' ? localStorage : null) {
+export function createFinanceInbox(mirror: Mirror, store: Storage | null = hostStore()) {
   /** Adds new inbox expenses to Finance Helper on this device, if it's here. */
   const apply = async (): Promise<number> => {
     if (!store) return 0
@@ -296,6 +297,8 @@ export function createFinanceInbox(mirror: Mirror, store: Storage | null = typeo
     if (!added) return 0
     try {
       store.setItem(FINANCE_KEY, JSON.stringify(state))
+      // Money's data is in IndexedDB: "added" is only said once it is really stored.
+      await (store as { flush?: () => Promise<void> }).flush?.()
     } catch {
       return 0
     }

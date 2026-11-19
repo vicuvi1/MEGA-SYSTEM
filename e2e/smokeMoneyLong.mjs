@@ -18,7 +18,7 @@ export async function moneyLongSteps({ step, pg, open, financeFrame, storedTx })
       frame = await financeFrame().catch((e) => { if (Date.now() > end) throw e; return null })
     }
     await pg.waitForTimeout(1500)
-    const original = await frame.evaluate((KEY) => { window.dispatchEvent(new Event('pagehide')); return localStorage.getItem(KEY) }, KEY)
+    const original = await frame.evaluate((KEY) => { window.dispatchEvent(new Event('pagehide')); return moneyStore.getItem(KEY) }, KEY)
     const go = async (hash) => {
       await frame.evaluate((h) => { if (location.hash !== h) location.hash = h; else window.dispatchEvent(new HashChangeEvent('hashchange')) }, hash)
       await pg.waitForTimeout(400)
@@ -86,7 +86,7 @@ export async function moneyLongSteps({ step, pg, open, financeFrame, storedTx })
       if ((await frame.locator('[data-testid="year-summary"] .ys-m').count()) !== 12) throw new Error('the year summary does not show 12 months')
       await frame.waitForTimeout(1200)
       const [shown, expected] = await frame.evaluate((KEY) => {
-        const st = JSON.parse(localStorage.getItem(KEY) || '{"tx":[]}')
+        const st = JSON.parse(moneyStore.getItem(KEY) || '{"tx":[]}')
         const year = String(new Date().getFullYear())
         const sum = st.tx
           .filter((t) => t.type === 'income' && t.date.startsWith(year) && !t.loan && !t.refund && !t.notIncome && !t.reconcile && !String(t.id).startsWith('life-reward-'))
@@ -98,7 +98,7 @@ export async function moneyLongSteps({ step, pg, open, financeFrame, storedTx })
       if (process.env.MONEYLONG_SHOTS) await frame.locator('[data-testid="year-summary"]').screenshot({ path: `${process.env.MONEYLONG_SHOTS}/year-summary.png` })
     } finally {
       // Put this device's Money data back as it was.
-      await frame.evaluate(([KEY, original]) => { window.dispatchEvent(new Event('pagehide')); if (original == null) localStorage.removeItem(KEY); else localStorage.setItem(KEY, original) }, [KEY, original])
+      await frame.evaluate(([KEY, original]) => { window.dispatchEvent(new Event('pagehide')); if (original == null) moneyStore.removeItem(KEY); else moneyStore.setItem(KEY, original) }, [KEY, original])
       await frame.evaluate(() => location.reload())
       await pg.waitForTimeout(2500)
     }

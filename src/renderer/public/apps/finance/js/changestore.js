@@ -9,7 +9,7 @@
 // stops a save.
 
 import { createTracker, mergeLogs, prune } from './changelog.js';
-import { isEncrypted, sealForExport, openImported, isSealed, STORAGE_KEYS } from './store.js';
+import { isEncrypted, sealForExport, openImported, isSealed, deviceStorage, STORAGE_KEYS } from './store.js';
 
 const DB = 'finance-helper-changes';
 const STORE = 'kv';
@@ -63,7 +63,7 @@ export function _setBackend(b, { demo = false } = {}) {
 
 const noMoneyHere = () => {
   try {
-    const ls = globalThis.localStorage;
+    const ls = deviceStorage();
     return !!ls && !ls.getItem(STORAGE_KEYS.KEY) && !ls.getItem(STORAGE_KEYS.ENC);
   } catch { return false; }
 };

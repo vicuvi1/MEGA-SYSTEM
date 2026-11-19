@@ -16,7 +16,7 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
     }
     return frame
   }
-  const stored = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k) || '{"tx":[]}'), KEY)
+  const stored = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k) || '{"tx":[]}'), KEY)
 
   await step('Money opens on the balance: clicking Money in the menu shows Finance Home with its own sidebar and the balance card top-left, kept on Log, the Life hub is one tab away', async () => {
     await pg.setViewportSize({ width: 1440, height: 900 })
@@ -53,9 +53,9 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
   await step('Money favourites, search and emergency fund: one tap adds with Undo, search words make chips with a count and total, the meter shows months', async () => {
     await open('money')
     let frame = await waitFrame()
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await pg.evaluate((k) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       const iso = (back) => { const d = new Date(); d.setDate(d.getDate() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` }
       const monthMid = (back) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - back); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-10` }
       st.tx = st.tx.filter((t) => !String(t.id).startsWith('smoke-m3-'))
@@ -72,7 +72,7 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
       // 15 of them, so it ranks first whatever the demo data holds; the newest is 35, the rest 30.
       for (let d = 1; d <= 15; d++) add('Smoke coffee', d === 1 ? 3500 : 3000, iso(d), 'food')
       for (const b of [1, 2, 3]) add('Smoke rent', 30000, monthMid(b), 'smoke-m3-ess')
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, KEY)
     await frame.evaluate(() => { location.hash = '#home'; location.reload() })
     await pg.waitForTimeout(2800)
@@ -86,11 +86,11 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
       const before = await count()
       await coffee.first().locator('.fav-add').click()
       await frame.waitForSelector('#toast:not([hidden]) button', { timeout: 5500 })
-      await pg.waitForFunction(([k, n]) => (JSON.parse(localStorage.getItem(k)).tx || []).filter((t) => t.note === 'Smoke coffee').length === n, [KEY, before + 1], { timeout: 11000 })
+      await pg.waitForFunction(([k, n]) => (JSON.parse(moneyStore.getItem(k)).tx || []).filter((t) => t.note === 'Smoke coffee').length === n, [KEY, before + 1], { timeout: 11000 })
       const added = (await stored()).tx.filter((t) => t.note === 'Smoke coffee').sort((a, b) => b.createdAt - a.createdAt)[0]
       if (added.amount !== 3500) throw new Error(`added ${added.amount}, expected the latest amount 3500`)
       await frame.evaluate(() => document.querySelector('#toast button')?.click())
-      await pg.waitForFunction(([k, n]) => (JSON.parse(localStorage.getItem(k)).tx || []).filter((t) => t.note === 'Smoke coffee').length === n, [KEY, before], { timeout: 11000 })
+      await pg.waitForFunction(([k, n]) => (JSON.parse(moneyStore.getItem(k)).tx || []).filter((t) => t.note === 'Smoke coffee').length === n, [KEY, before], { timeout: 11000 })
       // Pin keeps it; right-click opens the form to edit before adding.
       await frame.locator('[data-testid="favs"] .fav:has-text("Smoke coffee") .fav-pin').first().click()
       await frame.waitForSelector('[data-testid="favs"] .fav.pinned:has-text("Smoke coffee")', { timeout: 5500 })
@@ -125,7 +125,7 @@ export async function money3Steps({ step, pg, open, financeFrame }) {
       if ((await frame.locator('[data-testid="search-chips"] .sq-chip').count()) !== 3) throw new Error('removing a chip did not drop it')
       await frame.fill('#search', '')
     } finally {
-      await pg.evaluate(([k, o]) => { if (o == null) localStorage.removeItem(k); else localStorage.setItem(k, o) }, [KEY, original])
+      await pg.evaluate(([k, o]) => { if (o == null) moneyStore.removeItem(k); else moneyStore.setItem(k, o) }, [KEY, original])
       await frame.evaluate(() => { location.hash = '#home'; location.reload() }).catch(() => {})
       await pg.waitForTimeout(1500)
     }

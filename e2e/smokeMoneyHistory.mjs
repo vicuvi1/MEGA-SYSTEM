@@ -20,17 +20,17 @@ export async function moneyHistorySteps({ step, pg, open, financeFrame }) {
   }
   // What another device's sync would do: rewrite the stored copy (the frame hears it as a storage event).
   const fromOtherDevice = (src) => pg.evaluate(([k, s]) => {
-    const st = JSON.parse(localStorage.getItem(k) || 'null')
+    const st = JSON.parse(moneyStore.getItem(k) || 'null')
     // eslint-disable-next-line no-new-func
     new Function('st', s)(st)
-    localStorage.setItem(k, JSON.stringify(st))
+    moneyStore.setItem(k, JSON.stringify(st))
   }, [KEY, src])
-  const stored = () => pg.evaluate(([k, id]) => (JSON.parse(localStorage.getItem(k)).tx || []).find((t) => t.id === id) || null, [KEY, ID])
+  const stored = () => pg.evaluate(([k, id]) => (JSON.parse(moneyStore.getItem(k)).tx || []).find((t) => t.id === id) || null, [KEY, ID])
   const clickToast = (frame) => frame.evaluate(() => document.querySelector('#toast button')?.click())
 
   await step('Money change history: an edit from another device shows old -> new and its device, Put back restores it with Undo, a deleted record comes back', async () => {
     await openFinance()
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await fromOtherDevice(`
       const d = new Date(); const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
       st.tx = st.tx.filter((t) => t.id !== '${ID}');
@@ -61,7 +61,7 @@ export async function moneyHistorySteps({ step, pg, open, financeFrame }) {
       // Put back: the stored record is 120 again, newer than the edit (so it wins the sync).
       const edited = (await stored()).updatedAt
       await entry.locator('[data-testid="ch-back"]').click()
-      await pg.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 12000, [KEY, ID], { timeout: 11000 })
+      await pg.waitForFunction(([k, id]) => (JSON.parse(moneyStore.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 12000, [KEY, ID], { timeout: 11000 })
       const back = await stored()
       if (!(back.updatedAt > edited)) throw new Error('the put back record is not stamped as changed now')
       await frame.click('[data-testid="ch-rec-clear"]')
@@ -70,7 +70,7 @@ export async function moneyHistorySteps({ step, pg, open, financeFrame }) {
       if (process.env.MONEYHIST_SHOTS) await pg.setViewportSize({ width: 1920, height: 1000 }).then(() => frame.locator('#app').screenshot({ path: `${process.env.MONEYHIST_SHOTS}/money-change-history.png` })).catch(() => {})
       // Undo from the toast: back to 150, logged as an undo.
       await clickToast(frame)
-      await pg.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 15000, [KEY, ID], { timeout: 9000 })
+      await pg.waitForFunction(([k, id]) => (JSON.parse(moneyStore.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 15000, [KEY, ID], { timeout: 9000 })
       await frame.waitForSelector('[data-testid="ch-entry"][data-act-kind="undo"]', { timeout: 5500 })
       // Deleted on another device: "Deleted only", then Bring back.
       await fromOtherDevice(`st.tx = st.tx.filter((x) => x.id !== '${ID}'); st.deleted = { ...(st.deleted || {}), '${ID}': Date.now() + 2000 };`)
@@ -79,13 +79,13 @@ export async function moneyHistorySteps({ step, pg, open, financeFrame }) {
       const del = frame.locator('[data-testid="ch-entry"][data-act-kind="delete"]', { hasText: 'smoke history lunch' }).first()
       if (!/Bring back/.test(await del.innerText())) throw new Error('the deleted record has no Bring back')
       await del.locator('[data-testid="ch-back"]').click()
-      await pg.waitForFunction(([k, id]) => (JSON.parse(localStorage.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 15000, [KEY, ID], { timeout: 11000 })
-      const st = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY)
+      await pg.waitForFunction(([k, id]) => (JSON.parse(moneyStore.getItem(k)).tx || []).find((t) => t.id === id)?.amount === 15000, [KEY, ID], { timeout: 11000 })
+      const st = await pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)), KEY)
       if (st.deleted?.[ID]) throw new Error('the tombstone is still there after Bring back')
       await frame.selectOption('select[data-ch="kind"]', 'all')
     } finally {
       if (original != null) {
-        await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+        await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
         const f = await financeFrame()
         await f.evaluate(() => { location.hash = '#home'; location.reload() })
         await pg.waitForTimeout(1600)

@@ -16,6 +16,7 @@ import { setSetting } from '../../../../main/settings'
 import { esc } from './telegram'
 import type { BotContext, Tap } from './context'
 import type { CallbackHandler } from './callbacks'
+import { hostStore } from '../bigStore'
 
 type Kb = { inline_keyboard: { text: string; callback_data: string }[][] }
 
@@ -107,7 +108,7 @@ export const CAREER_CALLBACK: CallbackHandler = {
       }
       if (op === 'p') {
         const moved = Math.max(0, Math.round(Number(b) || 0))
-        const fin = financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null)
+        const fin = financeStateFrom(db, hostStore())
         const tx = (Array.isArray(fin?.tx) ? fin.tx : []).find((x: any) => String(x.id) === a)
         const m = loadMoney(db)
         setSetting(db as any, CAREER_MONEY, JSON.stringify({ ...m, answers: answerPayIn(m.answers, { txId: a, day: String(tx?.date ?? today).slice(0, 10) }, moved, today) }))

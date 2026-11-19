@@ -8,6 +8,7 @@ import { financeStateFrom } from './botBrain'
 import type { MoneyHubView } from './moneyHub'
 import { inboxWarning, readInbox, type InboxWarning } from './financeInbox'
 import type { WebServices } from './webServices'
+import { hostStore } from './bigStore'
 
 export interface QuickPreview {
   amount: number
@@ -47,7 +48,7 @@ export interface MoneyApi {
   applyInbox(): Promise<{ added: number; warning: InboxWarning | null }>
 }
 
-const store = () => (typeof localStorage !== 'undefined' ? localStorage : null)
+const store = () => hostStore()
 const W = 'life-wallet-changed'
 
 export function createMoneyApi(svcP: Promise<WebServices>, syncFinance: () => Promise<unknown>, applyFinanceInbox: () => Promise<number> = async () => 0): MoneyApi {

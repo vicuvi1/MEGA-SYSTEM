@@ -122,8 +122,9 @@ const day = () => new Date().toISOString().slice(0, 10)
 export function downloadApp(setting: string): string {
   const app = DATA_APPS.find((a) => a.setting === setting)
   if (!app) throw new Error('Unknown app')
-  const plain = localStorage.getItem(app.localKey)
-  const locked = app.setting === 'app_sync_finance' ? localStorage.getItem('finance-helper.enc') : null
+  const s = hostStore() ?? localStorage
+  const plain = s.getItem(app.localKey)
+  const locked = app.setting === 'app_sync_finance' ? s.getItem('finance-helper.enc') : null
   if (plain == null && locked == null) throw new Error(`${app.label} has no data on this device yet`)
   const name = `life-system-${app.file}${plain == null ? '-locked' : ''}-${day()}.json`
   download(plain ?? locked!, name, 'application/json')

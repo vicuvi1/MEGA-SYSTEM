@@ -14,6 +14,7 @@ import { trainOf } from '@core/trainLog'
 import { financeStateFrom } from './botBrain'
 import { ladderView, loadLadder, saveLadder, type LadderView } from './ladderStore'
 import type { Services, WebServices } from './webServices'
+import { hostStore } from './bigStore'
 
 const readJson = (db: any, key: string): any => {
   try {
@@ -34,7 +35,7 @@ function weekSteps(s: Services, v: LadderView) {
 }
 
 export function createLadder(svcP: Promise<WebServices>) {
-  const fin = (s: Services) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+  const fin = (s: Services) => financeStateFrom(s.db, hostStore())
   const read = async <T>(fn: (s: Services) => T) => (await svcP).read(fn)
   const write = async <T>(fn: (s: Services) => T) => (await svcP).write(fn, 'life-saga-changed')
   const edit = (fn: (l: ReturnType<typeof loadLadder>) => ReturnType<typeof loadLadder>) =>

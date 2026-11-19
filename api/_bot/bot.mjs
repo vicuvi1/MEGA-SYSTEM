@@ -13696,7 +13696,7 @@ var REP_LADDER = [
 ];
 /** Words after the ×: "push-ups", "seconds of plank". */
 var reqText = (m, sets, reps) => m.unit === "sec" ? `${sets}×${reps} s ${m.name.toLowerCase()}` : `${sets}×${reps} ${m.name.toLowerCase()}`;
-function build(family, group, name, rows) {
+function build$1(family, group, name, rows) {
 	const N = rows.length;
 	return {
 		family,
@@ -13747,7 +13747,7 @@ function generic(family) {
 			]);
 		}
 	});
-	return build(family, steps[0].group, f.name, rows.slice(0, 15).map((r) => [
+	return build$1(family, steps[0].group, f.name, rows.slice(0, 15).map((r) => [
 		r[0],
 		r[1],
 		r[2],
@@ -13759,7 +13759,7 @@ function trackOf(family) {
 	if (CACHE.has(family)) return CACHE.get(family);
 	let t = null;
 	const table = TABLES.find((x) => x[0] === family);
-	if (table) t = build(family, moveById(table[1][0][1])?.group ?? "push", FAMILIES[family]?.name ?? family, table[1]);
+	if (table) t = build$1(family, moveById(table[1][0][1])?.group ?? "push", FAMILIES[family]?.name ?? family, table[1]);
 	else t = generic(family);
 	CACHE.set(family, t);
 	return t;
@@ -29084,9 +29084,9 @@ var read$1 = (db, key) => {
 		return null;
 	}
 };
-var yearOf = (today) => Number(today.slice(0, 4));
+var yearOf$1 = (today) => Number(today.slice(0, 4));
 var loadSeasons = (db) => cleanSeasonBook(read$1(db, SAGA_SEASONS));
-var loadVision = (db, today) => cleanVision(read$1(db, SAGA_VISION), yearOf(today));
+var loadVision = (db, today) => cleanVision(read$1(db, SAGA_VISION), yearOf$1(today));
 var loadVisionPhotos = (db, cards) => cleanVisionPhotos(read$1(db, SAGA_VISION_PHOTOS), cards);
 var loadIdentity = (db) => cleanIdentity(read$1(db, SAGA_IDENTITY));
 var loadSide = (db) => cleanSide(read$1(db, SAGA_SIDE));
@@ -31306,10 +31306,2845 @@ var gmail_default = definePlugin({
 		run: ({ db }) => readData(db, GMAIL)
 	}]
 });
+var OUTBOX_KEY$1 = "life_offline_writes";
+var CHANNEL = "life-big-store";
+/** Money's own data: moves only after the new Money has started once, and is merged, never replaced. */
+var isAppKey = (key) => key === "finance-helper.state" || key === "finance-helper.enc";
+/** The keys that live here. */
+var isBigKey = (key) => isAppKey(key) || key === "life_offline_writes" || /^life_sync_app_sync_[a-z]+(_before_restore)?$/.test(key) || /^life_sync_app_sync_finance_sealed_(seen|mine|plain)$/.test(key);
+var PENDING = "life_big_pending:";
+/** With a waiting copy of Money's data: the marks of what IndexedDB held when it was written. */
+var PENDING_BASE = "life_big_pending_base:";
+var KEPT = ".kept";
+var DB_NAME = "life-big-store";
+var STORE = "kv";
+var OPEN_WAIT = 4e3;
+/** A short mark of a text, to tell whether two long texts are the same without keeping both. */
+var textMark = (text) => {
+	let a = 2166136261;
+	let b = 461845907;
+	for (let i = 0; i < text.length; i++) {
+		const c = text.charCodeAt(i);
+		a = Math.imul(a ^ c, 16777619);
+		b = Math.imul(b + c, 2246822507) ^ b >>> 13;
+	}
+	return `${text.length}.${(a >>> 0).toString(36)}.${(b >>> 0).toString(36)}`;
+};
+var req = (r) => new Promise((resolve, reject) => {
+	r.onsuccess = () => resolve(r.result);
+	r.onerror = () => reject(r.error ?? /* @__PURE__ */ new Error("IndexedDB request failed"));
+});
+var done = (tx) => new Promise((resolve, reject) => {
+	tx.oncomplete = () => resolve();
+	tx.onerror = () => reject(tx.error ?? /* @__PURE__ */ new Error("IndexedDB transaction failed"));
+	tx.onabort = () => reject(tx.error ?? /* @__PURE__ */ new Error("IndexedDB transaction aborted"));
+});
+/**
+* opts: { local, idb?, isBig?, isGated?, mark?, merge?(key, mine, theirs) -> text | null,
+*         name?, channel?, onError?(message), win?, openWait? }
+*/
+function createBigStore$1(opts) {
+	const { local } = opts;
+	const big = opts.isBig ?? isBigKey;
+	const gated = opts.isGated ?? isAppKey;
+	const mark = opts.mark ?? "finance-helper.store";
+	const ownWin = opts.win === void 0 ? typeof window !== "undefined" ? window : null : opts.win;
+	const idb = opts.idb === void 0 ? typeof indexedDB !== "undefined" ? indexedDB : null : opts.idb;
+	const cache = /* @__PURE__ */ new Map();
+	/** Money's data as this window last knew it to be in IndexedDB (a write that finds something else there merges). */
+	const base = /* @__PURE__ */ new Map();
+	/** The last text read from localStorage, for the moment another window has just moved it away. */
+	const last = /* @__PURE__ */ new Map();
+	/** Keys written or removed here since the start: the load from disk must not undo them. */
+	const touched = /* @__PURE__ */ new Set();
+	/** Keys whose move failed its check: they stay in localStorage and are used from there. */
+	const stay = /* @__PURE__ */ new Set();
+	let mode = "localStorage";
+	let db = null;
+	let error = null;
+	let marked = false;
+	/** Keys whose last write is stored nowhere on this device. */
+	const failed = /* @__PURE__ */ new Map();
+	let tail = Promise.resolve();
+	const waiting = /* @__PURE__ */ new Map();
+	/** Copies in localStorage already taken in while running, and left there for the page that wrote them. */
+	const taken = /* @__PURE__ */ new Map();
+	/** The write of Money's data on its way to IndexedDB right now (key -> text). */
+	const flying = /* @__PURE__ */ new Map();
+	/** The windows that hear about a change to Money's data (Life's page and the Money frame in it). */
+	const windows = /* @__PURE__ */ new Set();
+	const facades = /* @__PURE__ */ new WeakMap();
+	/** The page each of those windows showed when it last asked for the store. */
+	const pages = /* @__PURE__ */ new WeakMap();
+	const fail = (what, e) => {
+		error = `${what}: ${String(e?.message ?? e?.name ?? e)}`.slice(0, 240);
+		try {
+			opts.onError?.(error);
+		} catch {}
+	};
+	const safeGet = (k) => {
+		try {
+			return local.getItem(k);
+		} catch {
+			return null;
+		}
+	};
+	const safeDel = (k) => {
+		try {
+			local.removeItem(k);
+		} catch {}
+	};
+	const gateOpen = () => marked || (marked = safeGet(mark) === "idb");
+	/** May this key live in IndexedDB now? */
+	const may = (key) => big(key) && (!gated(key) || gateOpen());
+	const inIdb = (key) => mode === "indexeddb" && db != null && may(key) && !stay.has(key);
+	const mergeText = (key, mine, theirs) => {
+		if (!opts.merge) return null;
+		try {
+			const out = opts.merge(key, mine, theirs);
+			return typeof out === "string" && out ? out : null;
+		} catch {
+			return null;
+		}
+	};
+	/** A `storage` event for every window that uses this store, but not the one that made the change. */
+	const announce = (key, from = null) => {
+		if (!gated(key) || !windows.size) return;
+		Promise.resolve().then(() => {
+			for (const w of [...windows]) {
+				if (w === from) continue;
+				try {
+					if (w.closed) {
+						windows.delete(w);
+						continue;
+					}
+					const ev = new (w.StorageEvent ?? w.Event)("storage", {
+						key,
+						newValue: cache.has(key) ? cache.get(key) : null,
+						url: String(w.location?.href ?? "")
+					});
+					if (!("key" in ev) || ev.key !== key) Object.defineProperty(ev, "key", { value: key });
+					w.dispatchEvent(ev);
+				} catch {
+					windows.delete(w);
+				}
+			}
+		});
+	};
+	const openDb = () => {
+		const r = idb.open(opts.name ?? DB_NAME, 1);
+		r.onupgradeneeded = () => {
+			if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE);
+		};
+		return new Promise((resolve, reject) => {
+			const t = setTimeout(() => reject(/* @__PURE__ */ new Error("no answer from IndexedDB")), opts.openWait ?? OPEN_WAIT);
+			req(r).then((d) => {
+				clearTimeout(t);
+				resolve(d);
+			}, (e) => {
+				clearTimeout(t);
+				reject(e);
+			});
+		});
+	};
+	const read = async (key) => {
+		const v = await req(db.transaction(STORE).objectStore(STORE).get(key));
+		return typeof v === "string" ? v : null;
+	};
+	/** One write, as given. */
+	const put = async (key, value) => {
+		const tx = db.transaction(STORE, "readwrite");
+		const finish = done(tx);
+		if (value == null) tx.objectStore(STORE).delete(key);
+		else tx.objectStore(STORE).put(value, key);
+		await finish;
+		return value;
+	};
+	/** Reads what IndexedDB holds and writes what `decide` makes of it, in one transaction. Returns what was stored. */
+	const swap = async (key, decide) => {
+		const tx = db.transaction(STORE, "readwrite");
+		const os = tx.objectStore(STORE);
+		const finish = done(tx);
+		let out = null;
+		let thrown = null;
+		const r = os.get(key);
+		r.onsuccess = () => {
+			try {
+				out = decide(typeof r.result === "string" ? r.result : null, os);
+				os.put(out, key);
+			} catch (e) {
+				thrown = e;
+			}
+		};
+		await finish;
+		if (thrown) throw thrown;
+		return out;
+	};
+	/**
+	* A write from this window. Money's data: if IndexedDB holds something this window did not
+	* know (another window wrote first), the two are merged instead of one replacing the other.
+	*/
+	const store1 = (key, value) => value == null || !gated(key) ? put(key, value) : swap(key, (cur) => cur != null && cur !== value && cur !== base.get(key) ? mergeText(key, value, cur) ?? value : value);
+	/** The write to IndexedDB, in order. A failure keeps the value in localStorage if it fits, and is said out loud. */
+	const queue = (key, value) => {
+		waiting.set(key, value);
+		tail = tail.then(async () => {
+			if (!waiting.has(key) || waiting.get(key) !== value) return;
+			try {
+				if (value != null && gated(key)) flying.set(key, value);
+				const out = await store1(key, value).finally(() => flying.delete(key));
+				const newer = waiting.get(key) !== value;
+				if (!newer) waiting.delete(key);
+				if (gated(key)) {
+					if (out == null) base.delete(key);
+					else if (out === value) base.set(key, out);
+					else if (newer) base.delete(key);
+					else {
+						base.set(key, out);
+						cache.set(key, out);
+						announce(key);
+					}
+				}
+				safeDel(PENDING + key);
+				safeDel(PENDING_BASE + key);
+				if (!stay.has(key) && !gated(key)) safeDel(key);
+				opts.channel?.postMessage({ key });
+				failed.delete(key);
+			} catch (e) {
+				waiting.delete(key);
+				try {
+					if (value == null) local.removeItem(key);
+					else local.setItem(key, value);
+					stay.add(key);
+					if (value != null) last.set(key, value);
+					cache.delete(key);
+					failed.delete(key);
+					fail(`This device's bigger storage refused a write, so "${key}" is kept in the small one`, e);
+				} catch (e2) {
+					failed.set(key, /* @__PURE__ */ new Error(`This device's storage is full (${String(e2?.name ?? e2)})`));
+					fail(`"${key}" could not be stored on this device`, e2);
+				}
+			}
+		});
+	};
+	/**
+	* A copy found in localStorage (an old one, one an older tab wrote later, or a write that was
+	* on its way when the page closed): into IndexedDB, read back, compared, and only then removed.
+	* Money's data is merged with what IndexedDB already holds; the sync's copies take the later one.
+	*/
+	const absorb = async (key, from = key, keep = false) => {
+		const found = safeGet(from);
+		if (found == null) return;
+		if (keep && taken.get(key) === found) return;
+		if (!gated(key) && touched.has(key)) return;
+		try {
+			let unmerged = false;
+			const next = !gated(key) ? await put(key, found) : await swap(key, (disk, os) => {
+				if (disk == null || disk === found) return found;
+				if (from !== key && (safeGet(PENDING_BASE + key) || "").split("|").includes(textMark(disk))) return found;
+				const merged = mergeText(key, disk, found);
+				if (merged != null) return merged;
+				os.put(disk, key + KEPT);
+				unmerged = true;
+				return found;
+			});
+			if (unmerged) fail(`Two copies of "${key}" were found on this device. The later one is in use; the other is kept as "${key}${KEPT}"`, "they could not be merged");
+			if (await read(key) !== next) throw new Error("the copy read back is not the copy written");
+			if (keep) taken.set(key, found);
+			else if (safeGet(from) === found) safeDel(from);
+			if (from !== key) safeDel(PENDING_BASE + key);
+			stay.delete(key);
+			last.delete(key);
+			if (waiting.has(key)) base.delete(key);
+			else {
+				cache.set(key, next);
+				if (gated(key)) base.set(key, next);
+			}
+			opts.channel?.postMessage({ key });
+			announce(key);
+		} catch (e) {
+			if (from !== key || keep) return;
+			stay.add(key);
+			last.set(key, found);
+			cache.delete(key);
+			fail(`"${key}" could not be moved to the bigger storage and stays where it was`, e);
+		}
+	};
+	const names = () => {
+		const out = [];
+		try {
+			for (let i = 0; i < local.length; i++) {
+				const k = local.key(i);
+				if (k) out.push(k);
+			}
+		} catch {}
+		return out;
+	};
+	/** Every old copy that may move now. */
+	const absorbAll = async () => {
+		for (const key of names()) if (big(key) && may(key)) await absorb(key);
+	};
+	const ready = (async () => {
+		if (!idb) {
+			error = "IndexedDB is not available here, so the big copies stay in the small storage";
+			return;
+		}
+		try {
+			const opened = await openDb();
+			const tx = opened.transaction(STORE);
+			const [keys, values] = await Promise.all([req(tx.objectStore(STORE).getAllKeys()), req(tx.objectStore(STORE).getAll())]);
+			db = opened;
+			keys.forEach((k, i) => {
+				if (typeof k !== "string" || typeof values[i] !== "string" || !big(k)) return;
+				if (gated(k)) {
+					marked = true;
+					base.set(k, values[i]);
+				}
+				if (!touched.has(k)) cache.set(k, values[i]);
+			});
+			mode = "indexeddb";
+		} catch (e) {
+			db = null;
+			fail("IndexedDB is not available here, so the big copies stay in the small storage", e);
+			return;
+		}
+		for (const k of names()) {
+			if (!k.startsWith(PENDING)) continue;
+			const key = k.slice(17);
+			if (!big(key)) safeDel(k);
+			else if (gated(key)) {
+				if (may(key)) await absorb(key, k);
+			} else {
+				const v = safeGet(k);
+				if (v != null && !touched.has(key)) {
+					cache.set(key, v);
+					queue(key, v);
+				} else safeDel(k);
+			}
+		}
+		await absorbAll();
+		await tail;
+	})();
+	/** In line behind the writes, so the two never cross. */
+	const soak = (key) => {
+		tail = tail.then(() => inIdb(key) || stay.has(key) && db && may(key) ? absorb(key, key, true) : void 0).catch(() => {});
+		return tail;
+	};
+	/** A copy in localStorage that has not been taken in yet. */
+	const fresh = (key) => {
+		const v = safeGet(key);
+		return v != null && taken.get(key) !== v;
+	};
+	if (opts.channel) opts.channel.onmessage = (e) => {
+		const key = e?.data?.key;
+		if (typeof key !== "string" || !db || !big(key)) return;
+		if (gated(key)) marked = true;
+		if (may(key) && fresh(key)) return void soak(key);
+		if (waiting.has(key)) return;
+		read(key).then((v) => {
+			if (waiting.has(key)) return;
+			const was = cache.has(key) ? cache.get(key) : null;
+			stay.delete(key);
+			last.delete(key);
+			if (v == null) {
+				cache.delete(key);
+				base.delete(key);
+			} else {
+				cache.set(key, v);
+				if (gated(key)) base.set(key, v);
+			}
+			if (was !== v) announce(key);
+		}, () => {});
+	};
+	if (ownWin && typeof ownWin.addEventListener === "function") {
+		ownWin.addEventListener("pagehide", () => {
+			for (const [key, value] of waiting) {
+				if (value == null) continue;
+				try {
+					local.setItem(PENDING + key, value);
+					if (gated(key)) local.setItem(PENDING_BASE + key, [base.get(key), flying.get(key)].filter((t) => typeof t === "string").map(textMark).join("|"));
+				} catch {
+					try {
+						const tx = db.transaction(STORE, "readwrite");
+						tx.objectStore(STORE).put(value, key);
+						tx.commit?.();
+					} catch {}
+				}
+			}
+		});
+		ownWin.addEventListener("storage", (e) => {
+			const key = e?.key;
+			if (typeof key !== "string" || e.newValue == null || e.storageArea !== local || !big(key)) return;
+			if (db && may(key)) soak(key);
+		});
+	}
+	/** IndexedDB is still being opened: a write is kept in memory and stored once it answers. */
+	const opening = (key) => may(key) && !!idb && db == null && mode === "localStorage" && !error;
+	const getItem = (key) => {
+		if (!big(key)) return local.getItem(key);
+		if (!may(key)) {
+			const v = local.getItem(key);
+			if (v != null) last.set(key, v);
+			return v;
+		}
+		if (cache.has(key)) return cache.get(key);
+		if (touched.has(key) && inIdb(key)) return null;
+		const v = safeGet(key);
+		if (v != null) {
+			if (gated(key)) last.set(key, v);
+			return v;
+		}
+		return mode === "indexeddb" && db && last.has(key) ? last.get(key) : null;
+	};
+	const setItem = (key, value, from = null, own = local) => {
+		if (!big(key)) return own.setItem(key, value);
+		const text = String(value);
+		if (!inIdb(key) && !opening(key)) {
+			own.setItem(key, text);
+			if (may(key) || gated(key)) last.set(key, text);
+			return;
+		}
+		touched.add(key);
+		cache.set(key, text);
+		last.delete(key);
+		announce(key, from);
+		if (db) queue(key, text);
+		else {
+			waiting.set(key, text);
+			ready.then(() => {
+				if (cache.get(key) !== text || waiting.get(key) !== text) return;
+				if (db) return queue(key, text);
+				waiting.delete(key);
+				cache.delete(key);
+				try {
+					local.setItem(key, text);
+				} catch (e) {
+					cache.set(key, text);
+					failed.set(key, /* @__PURE__ */ new Error(`This device's storage is full (${String(e?.name ?? e)})`));
+					fail(`"${key}" could not be stored on this device`, e);
+				}
+			});
+		}
+	};
+	const removeItem = (key, from = null, own = local) => {
+		if (!big(key)) return own.removeItem(key);
+		last.delete(key);
+		if (!may(key) || !db && !opening(key)) return own.removeItem(key);
+		touched.add(key);
+		cache.delete(key);
+		stay.delete(key);
+		try {
+			own.removeItem(key);
+		} catch {}
+		safeDel(PENDING + key);
+		safeDel(PENDING_BASE + key);
+		announce(key, from);
+		if (db) queue(key, null);
+		else {
+			waiting.set(key, null);
+			ready.then(() => {
+				if (cache.has(key) || waiting.get(key) !== null) return;
+				if (db) queue(key, null);
+				else waiting.delete(key);
+			});
+		}
+	};
+	const flush = async () => {
+		await ready.catch(() => {});
+		let seen;
+		do {
+			seen = tail;
+			await seen;
+		} while (seen !== tail);
+		const first = failed.values().next().value;
+		if (first) throw first;
+	};
+	/**
+	* The new Money has started on this device: its data may leave localStorage now.
+	* Resolves once it is in IndexedDB and checked (or stays where it was, with the reason in status()).
+	*/
+	const moveIn = async () => {
+		marked = true;
+		try {
+			if (safeGet(mark) !== "idb") local.setItem(mark, "idb");
+		} catch {}
+		await ready.catch(() => {});
+		if (!db) return;
+		tail = tail.then(absorbAll).catch(() => {});
+		await tail;
+	};
+	const status = () => {
+		const keys = [...cache].map(([key, v]) => ({
+			key,
+			chars: v.length,
+			where: "indexeddb"
+		}));
+		for (const k of names()) if (big(k) && !cache.has(k)) keys.push({
+			key: k,
+			chars: (safeGet(k) ?? "").length,
+			where: "localStorage"
+		});
+		return {
+			mode,
+			error,
+			keys,
+			moneyMoved: gateOpen()
+		};
+	};
+	/** The window's own localStorage (for keys that are not kept here, so its `storage` events go out as they always did). */
+	const ownOf = (win) => {
+		try {
+			return win?.localStorage ?? local;
+		} catch {
+			return local;
+		}
+	};
+	const face = (from) => ({
+		ready,
+		flush,
+		status,
+		moveIn,
+		getItem,
+		setItem: (key, value) => setItem(key, value, from, ownOf(from)),
+		removeItem: (key) => removeItem(key, from, ownOf(from)),
+		clear: () => local.clear(),
+		key: (i) => local.key(i),
+		get length() {
+			return local.length;
+		},
+		/** The same store for another window on this page (the Money frame): it hears the others' changes, not its own. */
+		forWindow(win) {
+			if (!win) return store;
+			let f = facades.get(win);
+			if (!f) {
+				f = face(win);
+				facades.set(win, f);
+			}
+			let page = win;
+			try {
+				page = win.document ?? win;
+			} catch {}
+			if (pages.get(win) !== page) {
+				pages.set(win, page);
+				windows.add(win);
+				try {
+					win.addEventListener("pagehide", () => pages.get(win) === page && windows.delete(win));
+					win.addEventListener("pageshow", () => pages.get(win) === page && windows.add(win));
+				} catch {}
+			}
+			return f;
+		}
+	});
+	const store = face(null);
+	return store;
+}
+/** Money's own merge, for `createBigStore({ merge })`: (mergeLocal, normalizeState) from sync.js and model.js. */
+var moneyMerge$1 = (mergeLocal, normalizeState) => (key, mine, theirs) => key === "finance-helper.state" ? JSON.stringify(mergeLocal(normalizeState(JSON.parse(mine)), normalizeState(JSON.parse(theirs)))) : null;
+// src/renderer/public/apps/finance/js/money.js
+var LETTERS$1 = /[^\d.,+\-*/()x×÷]/gi;
+function parseAmount$2(text) {
+	if (text == null) return null;
+	if (typeof text === "number") return Number.isFinite(text) ? Math.round(text * 100) : null;
+	let s = String(text).replace(/[\s  ]/g, "").replace(/[^\d.,-]/g, "");
+	if (!s || !/\d/.test(s)) return null;
+	const negative = s.startsWith("-");
+	s = s.replace(/-/g, "");
+	const n = toNumber(s);
+	if (n == null) return null;
+	return Math.round((negative ? -n : n) * 100);
+}
+function toNumber(s) {
+	const lastDot = s.lastIndexOf(".");
+	const lastComma = s.lastIndexOf(",");
+	if (lastDot >= 0 && lastComma >= 0) {
+		const dec = lastDot > lastComma ? "." : ",";
+		const thou = dec === "." ? "," : ".";
+		s = s.split(thou).join("").replace(dec, ".");
+	} else if (lastComma >= 0) s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
+	else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");
+	if (!/^\d*\.?\d*$/.test(s) || s === ".") return null;
+	const n = Number(s);
+	return Number.isFinite(n) ? n : null;
+}
+function evalAmount(text) {
+	if (text == null) return null;
+	const s = String(text).replace(/[\s  ]/g, "").replace(LETTERS$1, "").replace(/[x×]/gi, "*").replace(/÷/g, "/");
+	if (!s) return null;
+	if (!/[+*/()]/.test(s.slice(1)) && !/\d-/.test(s)) return parseAmount$2(s);
+	const tokens = s.match(/\d[\d.,]*|[+\-*/()]/g);
+	if (!tokens || tokens.join("") !== s) return null;
+	let i = 0;
+	const peek = () => tokens[i];
+	const next = () => tokens[i++];
+	function expr() {
+		let v = term();
+		while (peek() === "+" || peek() === "-") {
+			const op = next();
+			const r = term();
+			if (v == null || r == null) return null;
+			v = op === "+" ? v + r : v - r;
+		}
+		return v;
+	}
+	function term() {
+		let v = factor();
+		while (peek() === "*" || peek() === "/") {
+			const op = next();
+			const r = factor();
+			if (v == null || r == null) return null;
+			if (op === "/" && r === 0) return null;
+			v = op === "*" ? v * r : v / r;
+		}
+		return v;
+	}
+	function factor() {
+		const t = next();
+		if (t === "-") {
+			const v = factor();
+			return v == null ? null : -v;
+		}
+		if (t === "(") {
+			const v = expr();
+			if (next() !== ")") return null;
+			return v;
+		}
+		if (t && /^\d/.test(t)) return toNumber(t);
+		return null;
+	}
+	const v = expr();
+	if (v == null || i !== tokens.length || !Number.isFinite(v)) return null;
+	return Math.round(v * 100);
+}
+var MASK = "••••";
+var hidden = false;
+function formatMoney$2(cents, currency = "MDL", { sign = false, compact = false, reveal = false } = {}) {
+	if (hidden && !reveal) return MASK + (currency ? " " + currency : "");
+	const neg = cents < 0;
+	const abs = Math.abs(Math.round(cents));
+	let whole = Math.floor(abs / 100);
+	const frac = abs % 100;
+	let text;
+	if (compact && whole >= 1e4) {
+		const k = whole / 1e3;
+		text = (k >= 100 ? Math.round(k) : Math.round(k * 10) / 10).toString().replace(".", ",") + "k";
+	} else text = group(whole) + (frac ? "," + String(frac).padStart(2, "0") : "");
+	return (neg ? "−" : sign && cents > 0 ? "+" : "") + text + (currency ? "\xA0" + currency : "");
+}
+function group(n) {
+	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
+}
+// src/renderer/public/apps/finance/js/dates.js
+var MONTHS$4 = [
+	"January",
+	"February",
+	"March",
+	"April",
+	"May",
+	"June",
+	"July",
+	"August",
+	"September",
+	"October",
+	"November",
+	"December"
+];
+var pad$11 = (n) => String(n).padStart(2, "0");
+function toISO(d) {
+	return `${d.getFullYear()}-${pad$11(d.getMonth() + 1)}-${pad$11(d.getDate())}`;
+}
+var monthKey = (iso) => iso.slice(0, 7);
+function monthLabel(key, short = false) {
+	const [y, m] = key.split("-").map(Number);
+	const name = MONTHS$4[m - 1];
+	return `${short ? name.slice(0, 3) : name} ${y}`;
+}
+function addMonths(key, n) {
+	const [y, m] = key.split("-").map(Number);
+	const idx = y * 12 + (m - 1) + n;
+	return `${Math.floor(idx / 12)}-${pad$11(idx % 12 + 1)}`;
+}
+function daysInMonth$1(key) {
+	const [y, m] = key.split("-").map(Number);
+	return new Date(Date.UTC(y, m, 0)).getUTCDate();
+}
+function utc(iso) {
+	const [y, m, d] = iso.split("-").map(Number);
+	return new Date(Date.UTC(y, m - 1, d));
+}
+function addDays$4(iso, n) {
+	const d = utc(iso);
+	d.setUTCDate(d.getUTCDate() + n);
+	return d.toISOString().slice(0, 10);
+}
+var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
+function weekday$2(iso) {
+	return utc(iso).getUTCDay();
+}
+var dowIndex = (iso) => (weekday$2(iso) + 6) % 7;
+var DOW_SHORT = [
+	"Mon",
+	"Tue",
+	"Wed",
+	"Thu",
+	"Fri",
+	"Sat",
+	"Sun"
+];
+function isValidISO(iso) {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
+	const d = utc(iso);
+	return toISO(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) === iso;
+}
+// src/renderer/public/apps/finance/js/fx.js
+var STABLE = {
+	USDT: 1,
+	USDC: 1,
+	FDUSD: 1,
+	BUSD: 1
+};
+function perUsd(rates, code) {
+	if (code === "USD") return 1;
+	const v = rates?.usd?.[code];
+	return v > 0 ? v : null;
+}
+function convert(cents, from, to, rates) {
+	if (from === to) return cents;
+	const a = perUsd(rates, from);
+	const b = perUsd(rates, to);
+	if (!a || !b) return null;
+	return Math.round(cents / a * b);
+}
+function pairRate(from, to, rates) {
+	if (from === to) return 1;
+	const a = perUsd(rates, from);
+	const b = perUsd(rates, to);
+	return a && b ? b / a : null;
+}
+function rateToBase(state, cur) {
+	const base = state?.settings?.currency || "MDL";
+	if (!cur || cur === base) return 1;
+	const live = pairRate(cur, base, state?.rates);
+	if (live) return Math.round(live * 1e4) / 1e4;
+	let best = null;
+	for (const t of state?.tx || []) {
+		if (!t || t.currency !== cur || !(t.rate > 0) || t.rate === 1 && t.base === t.amount) continue;
+		if (!best || String(t.date) > String(best.date) || t.date === best.date && (t.createdAt || 0) > (best.createdAt || 0)) best = t;
+	}
+	return best ? best.rate : null;
+}
+function coinUsd(rates, asset) {
+	if (STABLE[asset]) return STABLE[asset];
+	const p = rates?.crypto?.[asset];
+	return p > 0 ? p : null;
+}
+function coinValue(qty, asset, to, rates) {
+	const usd = coinUsd(rates, asset);
+	if (usd == null || !Number.isFinite(qty)) return null;
+	return convert(Math.round(qty * usd * 100), "USD", to, rates);
+}
+// src/renderer/public/apps/finance/js/recurring.js
+var UNITS = [
+	{
+		id: "day",
+		one: "day",
+		many: "days"
+	},
+	{
+		id: "week",
+		one: "week",
+		many: "weeks"
+	},
+	{
+		id: "month",
+		one: "month",
+		many: "months"
+	},
+	{
+		id: "year",
+		one: "year",
+		many: "years"
+	}
+];
+var LEGACY = {
+	week: ["week", 1],
+	"2weeks": ["week", 2],
+	month: ["month", 1],
+	"3months": ["month", 3],
+	year: ["year", 1]
+};
+var pad$10 = (n) => String(n).padStart(2, "0");
+var clampN = (n) => Math.max(1, Math.min(999, Math.round(Number(n)) || 1));
+function spec(rule) {
+	if (rule.every === "once") return null;
+	if (rule.every === "custom") {
+		const unit = UNITS.some((u) => u.id === rule.unit) ? rule.unit : "month";
+		const dom = (unit === "month" || unit === "year") && Number.isInteger(rule.dom) && rule.dom >= 1 && rule.dom <= 31 ? rule.dom : null;
+		return {
+			unit,
+			n: clampN(rule.n),
+			dom
+		};
+	}
+	const [unit, n] = LEGACY[rule.every] || ["month", 1];
+	return {
+		unit,
+		n,
+		dom: null
+	};
+}
+function anchor(rule, s) {
+	if (!s.dom || s.unit !== "month" && s.unit !== "year") return rule.start;
+	const key = monthKey(rule.start);
+	const d = `${key}-${pad$10(Math.min(s.dom, daysInMonth$1(key)))}`;
+	return d >= rule.start ? d : `${addMonths(key, 1)}-${pad$10(Math.min(s.dom, daysInMonth$1(addMonths(key, 1))))}`;
+}
+function nth(rule, n) {
+	const s = spec(rule);
+	if (!s) return rule.start;
+	const first = anchor(rule, s);
+	if (s.unit === "day") return addDays$4(first, s.n * n);
+	if (s.unit === "week") return addDays$4(first, 7 * s.n * n);
+	const key = addMonths(monthKey(first), (s.unit === "year" ? 12 : 1) * s.n * n);
+	return `${key}-${pad$10(Math.min(s.dom || Number(first.slice(8, 10)), daysInMonth$1(key)))}`;
+}
+var recId = (rule, date) => `rec-${rule.id}-${date}`;
+function occurrences(rule, from, to, max = 1e3) {
+	const out = [];
+	for (let n = 0; n < 5e3 && out.length < max; n++) {
+		if (rule.every === "once" && n > 0) break;
+		const d = nth(rule, n);
+		if (d > to || rule.end && d > rule.end) break;
+		if (d >= from) out.push(d);
+	}
+	return out;
+}
+var active = (state) => (state.recurring || []).filter((r) => !r.paused);
+var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").localeCompare(b.rule.note || "");
+function dueItems(state, today) {
+	const out = [];
+	const have = new Set((state.tx || []).map((t) => t.id));
+	for (const rule of active(state)) {
+		const from = rule.lastDone ? addDays$4(rule.lastDone, 1) : rule.start;
+		for (const date of occurrences(rule, from, today, 60)) {
+			if (have.has(recId(rule, date))) continue;
+			out.push({
+				rule,
+				date
+			});
+		}
+	}
+	return out.sort(sortItems);
+}
+function upcomingItems(state, today, days = 30) {
+	const out = [];
+	const to = addDays$4(today, days);
+	for (const rule of active(state)) {
+		const from = addDays$4(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
+		for (const date of occurrences(rule, from, to, 60)) out.push({
+			rule,
+			date
+		});
+	}
+	return out.sort(sortItems);
+}
+// src/renderer/public/apps/finance/js/splits.js
+/** Can this record be split? Spent or Earned, not a loan, a move, an adjustment or a points buy. */
+var canSplit = (t) => !!t && (t.type === "expense" || t.type === "income") && !t.loan && !t.reconcile && !String(t.id || "").startsWith("life-reward-");
+/** The record's lines when they are good (two or more, each above 0 with a category, adding up), else null. */
+function validLines(t) {
+	if (!canSplit(t) || !Array.isArray(t.splits) || t.splits.length < 2) return null;
+	let sum = 0;
+	for (const l of t.splits) {
+		if (!l || typeof l !== "object" || !Number.isSafeInteger(l.amount) || l.amount <= 0 || typeof l.category !== "string" || !l.category) return null;
+		sum += l.amount;
+	}
+	return sum === t.amount ? t.splits : null;
+}
+/** Each line's share of `whole` (the record's base), the last one taking the rounding. */
+function shares(lines, total, whole) {
+	let left = whole;
+	return lines.map((l, i) => {
+		if (i === lines.length - 1) return left;
+		const v = total ? Math.round(l.amount * whole / total) : 0;
+		left -= v;
+		return v;
+	});
+}
+/** The record as its lines (a record that is not split: itself, alone). */
+function splitLines(t) {
+	const lines = validLines(t);
+	if (!lines) return [t];
+	const whole = Number.isInteger(t.base) ? t.base : t.amount;
+	const base = shares(lines, t.amount, whole);
+	return lines.map((l, i) => {
+		const out = {
+			...t,
+			amount: l.amount,
+			base: base[i],
+			category: l.category,
+			lineOf: t.id,
+			line: i
+		};
+		delete out.splits;
+		delete out.orig;
+		delete out.debt;
+		if (l.sub) out.sub = l.sub;
+		else delete out.sub;
+		const note = [t.note, l.note].map((x) => String(x || "").trim()).filter(Boolean).join(" · ");
+		if (note) out.note = note;
+		else delete out.note;
+		if (l.incomeSource) out.incomeSource = l.incomeSource;
+		return out;
+	});
+}
+/** A list with every split record replaced by its lines. The same array back when nothing is split. */
+function expandSplits(list) {
+	const arr = Array.isArray(list) ? list : [];
+	if (!arr.some((t) => t && t.splits)) return arr;
+	const out = [];
+	for (const t of arr) if (t && t.splits) out.push(...splitLines(t));
+	else out.push(t);
+	return out;
+}
+/** Every record of the state as lines: what totals count. */
+var linesOf = (state) => expandSplits(state?.tx || []);
+// src/renderer/public/apps/finance/js/catshare.js
+var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
+var isCorrection = (t) => !!t?.reconcile;
+var isRefund = (t) => t?.type === "income" && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
+var isNotCounted = (t) => t?.type === "income" && t.notIncome === true || t?.type === "expense" && t.notSpending === true;
+var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t) || isRefund(t);
+var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t) && !isRefund(t) && !isNotCounted(t);
+var signed$1 = (t, v) => isRefund(t) ? -v : v;
+// src/renderer/public/apps/finance/js/cattree.js
+var fold$5 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var SUB_DEFAULTS = [
+	{
+		key: "groceries",
+		name: "Groceries",
+		emoji: "🛒",
+		homes: ["food"]
+	},
+	{
+		key: "restaurants",
+		name: "Restaurants",
+		emoji: "🍽️",
+		homes: ["food"]
+	},
+	{
+		key: "cafes",
+		name: "Cafés & coffee",
+		emoji: "☕",
+		homes: ["food"]
+	},
+	{
+		key: "delivery",
+		name: "Delivery",
+		emoji: "🛵",
+		homes: ["food"]
+	},
+	{
+		key: "snacks",
+		name: "Snacks",
+		emoji: "🍫",
+		homes: ["food"]
+	},
+	{
+		key: "fuel",
+		name: "Fuel",
+		emoji: "⛽",
+		homes: ["transport"]
+	},
+	{
+		key: "taxi",
+		name: "Taxi",
+		emoji: "🚕",
+		homes: ["transport"]
+	},
+	{
+		key: "public",
+		name: "Public transport",
+		emoji: "🚌",
+		homes: ["transport"]
+	},
+	{
+		key: "car",
+		name: "Car repairs",
+		emoji: "🔧",
+		homes: ["transport"]
+	},
+	{
+		key: "rent",
+		name: "Rent",
+		emoji: "🔑",
+		homes: ["home"]
+	},
+	{
+		key: "utilities",
+		name: "Utilities",
+		emoji: "💡",
+		homes: ["home", "bills"]
+	},
+	{
+		key: "internet",
+		name: "Internet & phone",
+		emoji: "📶",
+		homes: ["home", "bills"]
+	},
+	{
+		key: "furniture",
+		name: "Furniture",
+		emoji: "🛋️",
+		homes: ["home"]
+	},
+	{
+		key: "cleaning",
+		name: "Cleaning",
+		emoji: "🧽",
+		homes: ["home"]
+	},
+	{
+		key: "cosmetics",
+		name: "Cosmetics",
+		emoji: "💄",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "skincare",
+		name: "Skincare",
+		emoji: "🧴",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "haircut",
+		name: "Haircut",
+		emoji: "💇",
+		homes: ["beauty", "health"]
+	},
+	{
+		key: "pharmacy",
+		name: "Pharmacy",
+		emoji: "💊",
+		homes: ["health", "beauty"]
+	},
+	{
+		key: "doctor",
+		name: "Doctor",
+		emoji: "🩺",
+		homes: ["health", "beauty"]
+	},
+	{
+		key: "gym",
+		name: "Gym",
+		emoji: "🏋️",
+		homes: [
+			"sport",
+			"health",
+			"beauty"
+		]
+	},
+	{
+		key: "competitions",
+		name: "Competitions",
+		emoji: "🏆",
+		homes: ["sport"]
+	},
+	{
+		key: "gear",
+		name: "Sports gear",
+		emoji: "🎽",
+		homes: ["sport"]
+	},
+	{
+		key: "gadgets",
+		name: "Gadgets",
+		emoji: "📱",
+		homes: ["tech"]
+	},
+	{
+		key: "software",
+		name: "Software & AI",
+		emoji: "🤖",
+		homes: ["tech", "subscriptions"]
+	},
+	{
+		key: "games",
+		name: "Games",
+		emoji: "🎮",
+		homes: ["tech", "fun"]
+	},
+	{
+		key: "streaming",
+		name: "Streaming & music",
+		emoji: "📺",
+		homes: ["subscriptions", "fun"]
+	},
+	{
+		key: "apps",
+		name: "Apps & cloud",
+		emoji: "☁️",
+		homes: ["subscriptions", "tech"]
+	},
+	{
+		key: "clothes",
+		name: "Clothes",
+		emoji: "👕",
+		homes: ["shopping"]
+	},
+	{
+		key: "shoes",
+		name: "Shoes",
+		emoji: "👟",
+		homes: ["shopping"]
+	},
+	{
+		key: "accessories",
+		name: "Accessories",
+		emoji: "👜",
+		homes: ["shopping"]
+	},
+	{
+		key: "gifts",
+		name: "Gifts",
+		emoji: "🎁",
+		homes: ["gifts", "family"]
+	},
+	{
+		key: "support",
+		name: "Family support",
+		emoji: "💞",
+		homes: ["family", "gifts"]
+	},
+	{
+		key: "celebrations",
+		name: "Celebrations",
+		emoji: "🎂",
+		homes: ["gifts", "family"]
+	},
+	{
+		key: "goingout",
+		name: "Going out",
+		emoji: "🍻",
+		homes: ["fun"]
+	},
+	{
+		key: "cinema",
+		name: "Cinema",
+		emoji: "🎬",
+		homes: ["fun"]
+	},
+	{
+		key: "events",
+		name: "Events",
+		emoji: "🎟️",
+		homes: ["fun"]
+	},
+	{
+		key: "hobbies",
+		name: "Hobbies",
+		emoji: "🎨",
+		homes: ["fun"]
+	},
+	{
+		key: "travel",
+		name: "Travel",
+		emoji: "✈️",
+		homes: ["fun"]
+	},
+	{
+		key: "courses",
+		name: "Courses",
+		emoji: "🎓",
+		homes: ["learning"]
+	},
+	{
+		key: "books",
+		name: "Books",
+		emoji: "📚",
+		homes: ["learning"]
+	},
+	{
+		key: "certifications",
+		name: "Certifications",
+		emoji: "📜",
+		homes: ["learning"]
+	},
+	{
+		key: "stocks",
+		name: "Stocks & funds",
+		emoji: "📈",
+		homes: ["investing"]
+	},
+	{
+		key: "crypto",
+		name: "Crypto",
+		emoji: "🪙",
+		homes: ["investing"]
+	},
+	{
+		key: "bankfees",
+		name: "Bank fees",
+		emoji: "🏦",
+		homes: ["bills"]
+	},
+	{
+		key: "taxes",
+		name: "Taxes",
+		emoji: "🧾",
+		homes: ["bills"]
+	}
+];
+var PARENT_IDS = {
+	food: "food",
+	transport: "transport",
+	home: "home",
+	hygiene: "beauty",
+	health: "health",
+	clothes: "shopping",
+	shopping: "shopping",
+	gifts: "gifts",
+	"family-out": "family",
+	fun: "fun",
+	learning: "learning",
+	subscriptions: "subscriptions",
+	sport: "sport",
+	investing: "investing",
+	tech: "tech",
+	bills: "bills",
+	other: "other"
+};
+var PARENT_NAMES = [
+	["food", /food|grocer|eat|mancare|продукт|еда/],
+	["transport", /transport|car\b|auto|masina|travel to|транспорт/],
+	["home", /home|house|rent|casa|locuin|chirie|дом|кварт/],
+	["tech", /tech|gadget|electron|computer|laptop|техник|гаджет/],
+	["beauty", /beauty|cosmet|hygien|igien|frumus|красот|космет|гигиен/],
+	["health", /health|medic|sanat|pharm|здоров|медиц/],
+	["shopping", /shop|cloth|haine|fashion|одежд|покупк/],
+	["gifts", /gift|cadou|подар/],
+	["family", /family|famil|parent|kids|copii|семь|дет/],
+	["fun", /fun|going out|entertain|leisure|distract|развлеч|досуг/],
+	["learning", /learn|study|course|educ|school|invat|учеб|образов/],
+	["subscriptions", /subscri|abonam|подпис/],
+	["sport", /sport|gym|fitness|спорт/],
+	["investing", /invest|инвест/],
+	["bills", /bill|fee|tax|bank|impozit|comision|налог|комисс/]
+];
+function parentKeyOf(c) {
+	if (!c || c.type !== "expense") return null;
+	if (PARENT_IDS[c.id]) return PARENT_IDS[c.id];
+	const n = fold$5(c.name);
+	return PARENT_NAMES.find(([, re]) => re.test(n))?.[0] || null;
+}
+var ADD_IF_MISSING = {
+	tech: {
+		id: "tech",
+		name: "Tech",
+		emoji: "💻",
+		jar: "growth"
+	},
+	bills: {
+		id: "bills",
+		name: "Bills & fees",
+		emoji: "🧾",
+		jar: "living"
+	}
+};
+function ensureTree(settings) {
+	if (Array.isArray(settings.subcats)) {
+		if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
+		return false;
+	}
+	settings.categories = [...settings.categories || []];
+	const jars = settings.jars || [];
+	const home = {};
+	for (const c of settings.categories) {
+		if (c.archived) continue;
+		const k = parentKeyOf(c);
+		if (k && !home[k]) home[k] = c.id;
+	}
+	for (const [k, def] of Object.entries(ADD_IF_MISSING)) {
+		if (home[k] || settings.categories.some((c) => c.id === def.id)) continue;
+		const jar = jars.some((j) => j.id === def.jar) ? def.jar : jars.find((j) => !j.savings)?.id;
+		settings.categories.push({
+			id: def.id,
+			type: "expense",
+			name: def.name,
+			emoji: def.emoji,
+			...jar ? { jar } : {},
+			jarChosen: true,
+			updatedAt: 0
+		});
+		home[k] = def.id;
+	}
+	settings.subcats = [];
+	for (const d of SUB_DEFAULTS) {
+		const h = d.homes.find((x) => home[x]);
+		if (!h) continue;
+		settings.subcats.push({
+			id: `s-${d.key}`,
+			parent: home[h],
+			key: d.key,
+			name: d.name,
+			emoji: d.emoji,
+			updatedAt: 0
+		});
+	}
+	if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
+	return true;
+}
+var subList = (state) => Array.isArray(state.settings.subcats) ? state.settings.subcats : [];
+var subById = (state, id) => id ? subList(state).find((s) => s.id === id) || null : null;
+var subsOf = (state, catId) => subList(state).filter((s) => s.parent === catId && !s.archived);
+function subOf(state, t) {
+	const s = t && t.sub ? subById(state, t.sub) : null;
+	return s && s.parent === t.category ? s : null;
+}
+var isOther$1 = (catId) => !catId || catId === "other" || catId === "other-in";
+var touch = (o, now) => Object.assign(o, { updatedAt: now });
+function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
+	const s = subById(state, id);
+	if (!s) return false;
+	t.sub = s.id;
+	t.category = s.parent;
+	touch(t, now);
+	if (learn) rememberSub(state, t.note, s.id, now);
+	return true;
+}
+var STOP$4 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
+var noteWords = (note) => (fold$5(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$4.has(w));
+function merchantKey(note) {
+	return [...new Set(noteWords(note))].slice(0, 3).join(" ");
+}
+var MEMORY_MAX = 600;
+function rememberSub(state, note, id, now = Date.now()) {
+	const k = merchantKey(note);
+	if (!k || !subById(state, id)) return false;
+	const mem = { ...state.settings.subMemory || {} };
+	delete mem[k];
+	mem[k] = id;
+	const keys = Object.keys(mem);
+	for (const old of keys.slice(0, Math.max(0, keys.length - MEMORY_MAX))) delete mem[old];
+	state.settings.subMemory = mem;
+	state.settings.updatedAt = now;
+	return true;
+}
+function memorySub(state, note) {
+	const mem = state.settings.subMemory || {};
+	const k = merchantKey(note);
+	if (!k) return null;
+	if (mem[k] && subById(state, mem[k])) return subById(state, mem[k]);
+	const have = new Set(noteWords(note));
+	let best = null;
+	for (const [key, id] of Object.entries(mem)) {
+		const ws = key.split(" ");
+		if (!ws.every((w) => have.has(w))) continue;
+		const s = subById(state, id);
+		if (s && (!best || ws.length > best.n)) best = {
+			s,
+			n: ws.length
+		};
+	}
+	return best?.s || null;
+}
+var KEYWORDS$1 = [
+	["delivery", "glovo, wolt, straus, bolt food, yandex eda, livrare, deliver, доставк"],
+	["bankfees", "comision, commission, комисси, bank fee, card fee, deservire, обслуживание счета, maintenance fee, taxa card"],
+	["taxes", "tax$, taxes$, taxa$, impozit, налог, fisc, amenda, штраф, fine$"],
+	["software", "chatgpt, openai, claude, anthropic, cursor, copilot, github, midjourney, notion, figma, adobe, jetbrains, software, licen, gpt$, ai subscription"],
+	["streaming", "netflix, spotify, youtube premium, apple music, hbo, disney, deezer, okko, кинопоиск, yandex plus, music app"],
+	["apps", "icloud, google one, google storage, dropbox, cloud$, app store, google play"],
+	["games", "steam$, playstation, xbox, nintendo, epic games, game$, games$, joc$, jocuri, игр"],
+	["gadgets", "gadget, laptop, headphone, casti, charger, incarcator, mouse$, keyboard, monitor, usb$, cable, cablu, наушник, ноутбук, зарядк, smartphone, iphone, samsung, xiaomi, airpods, tablet, phone case, darwin, enter$"],
+	["taxi", "taxi, такси, yandex$, bolt$, uber$, itaxi"],
+	["fuel", "fuel, petrol, benzin, motorin, diesel, бензин, топлив, lukoil, rompetrol, petrom, tirex, gas station, азс$"],
+	["public", "bus$, autobuz, troleibuz, microbuz, metro$, tram$, train$, tren$, автобус, троллейбус, маршрутк, трамва, поезд, метро"],
+	["car", "car repair, service auto, mecanic, vulcaniz, шиномонтаж, автосервис, car wash, spalatorie, parking, parcare, парковк"],
+	["rent", "rent$, chirie, аренд, квартплат"],
+	["utilities", "electric, lumina, gaz$, apa$, water bill, utilit, comunal, коммун, свет$, газ$, вода$, termoelectrica, premier energy, heating, incalzire"],
+	["internet", "internet, telefon, phone bill, orange$, moldcell, starnet, unite$, mobile top, интернет, связь, телефон"],
+	["furniture", "furniture, mobila, sofa$, ikea, jysk, мебел, desk$, chair, scaun, canapea"],
+	["cleaning", "cleaning, curatenie, detergent, уборк, моющ, bleach, burete, clor$"],
+	["haircut", "haircut, hair$, frizer, tuns$, barber, стрижк, парикмах, nails$, manichiur, маникюр"],
+	["cosmetics", "cosmetic, makeup, machiaj, lipstick, ruj$, perfume, parfum, косметик, духи, помад, mascara, rimel"],
+	["skincare", "skincare, cream, crema, крем, serum, lotion, shampoo, sampon, soap$, sapun, шампун, мыло, toothpaste, pasta de dinti, deodorant, hygiene, igien, гигиен, уход"],
+	["pharmacy", "pharm, farmac, аптек, vitamin, medicament, лекарств, pills, pastile, таблетк"],
+	["doctor", "doctor, medic$, dentist, stomatolog, clinic, analize, hospital, spital, врач, клиник, стоматолог, анализ"],
+	["gym", "gym$, fitness, фитнес, спортзал, sala de forta, yoga, йога"],
+	["competitions", "competi, turneu, tournament, соревнов, турнир"],
+	["gear", "kimono, echipament, экипиров, sports gear, sport gear"],
+	["groceries", "grocer, supermarket, market$, lidl, kaufland, linella, fidesco, nr1$, green hills, produse, alimente, продукт, супермаркет, fruit, fructe, legume, vegetables, овощ, фрукт, bread, paine, хлеб, milk$, lapte, молок"],
+	["restaurants", "restaurant, kebab, shaorma, shawarma, шаурм, pizza, burger, sushi, lunch, dinner, pranz, cina$, ресторан, обед, ужин, mcdonald, kfc$, andy$, bistro, grill"],
+	["cafes", "coffee, cafe$, cafea, кофе, кафе, latte, cappuccino, espresso, starbucks, tea$, ceai, чай$, cofetarie"],
+	["snacks", "snack, chips, chocolate, ciocolat, шоколад, juice, suc$, сок$, ice cream, inghetata, мороженое, bakery, patiserie, covrig, sweets, dulciuri, конфет"],
+	["gifts", "gift, cadou, подар, present$, flowers, flori, цвет"],
+	["celebrations", "birthday, zi de nastere, aniversar, wedding, nunta, cumatrie, день рождения, свадьб, christmas, craciun, new year, revelion"],
+	["support", "mama$, mom$, mother, tata$, dad$, father, brother, frate, sister, sora$, parents, parinti, мама, папа, брат, сестр, родител, family, familie"],
+	["goingout", "bar$, club$, pub$, party, petrecere, drinks, beer, bere$, cocktail, бар$, клуб, пиво"],
+	["cinema", "cinema, movie, film$, кино$, cineplex"],
+	["events", "concert, ticket, bilet, theatre, theater, teatru, festival, show$, концерт, театр, museum, muzeu, музей, bowling, escape room"],
+	["hobbies", "hobby, paint, culori, guitar, chitara, lego$, craft, board game, joc de masa"],
+	["travel", "travel, trip$, hotel, airbnb, flight, avion, zbor$, booking, vacation, vacanta, excursie, путешеств, отель, wizz, ryanair"],
+	["courses", "course, curs$, cursuri, udemy, coursera, training, tutor$, репетитор, курс, school, scoala, universit, lesson, lectie"],
+	["books", "book$, books$, carte$, carti$, книг, kindle, librarie"],
+	["certifications", "certif, exam$, examen, экзамен, сертиф, ielts, toefl"],
+	["shoes", "shoe, pantofi, sneaker, adidasi, ghete, обув, кроссовк, boots, cizme"],
+	["accessories", "bag$, geanta, watch$, ceas$, belt$, curea, sunglasses, ochelari, jewel, bijuter, сумк, часы, рюкзак, backpack, rucsac"],
+	["clothes", "cloth, haine, shirt, tricou, jeans, blugi, jacket, geaca, dress$, rochie, одежд, футболк, куртк, zara$, lcw$, sweater, pulover, hoodie"],
+	["stocks", "stock$, stocks$, actiuni, etf$, broker, акци"],
+	["crypto", "crypto, bitcoin, btc$, binance, крипт, usdt$"]
+].map(([key, text]) => {
+	const items = text.split(",").map((x) => fold$5(x.trim())).filter(Boolean);
+	return {
+		key,
+		phrases: items.filter((x) => x.includes(" ")),
+		exact: items.filter((x) => !x.includes(" ") && x.endsWith("$")).map((x) => x.slice(0, -1)),
+		stems: items.filter((x) => !x.includes(" ") && !x.endsWith("$"))
+	};
+});
+function keywordKeys(note) {
+	const text = ` ${fold$5(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
+	const words = text.trim().split(" ").filter(Boolean);
+	const out = [];
+	for (const k of KEYWORDS$1) if (k.phrases.some((p) => text.includes(` ${p} `)) || k.exact.some((x) => words.includes(x)) || k.stems.some((x) => words.some((w) => w.startsWith(x)))) out.push(k.key);
+	return out;
+}
+function nameSub(state, note, ok) {
+	const words = new Set(noteWords(note));
+	return subList(state).filter((s) => !s.key && !s.archived && ok(s)).find((s) => {
+		const n = noteWords(s.name);
+		return n.length && n.every((w) => w.length >= 3 && words.has(w));
+	}) || null;
+}
+var pastCache = /* @__PURE__ */ new WeakMap();
+function pastIndex(state) {
+	let last = 0;
+	let filed = 0;
+	for (const t of state.tx) {
+		if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
+		if (t.sub) filed++;
+	}
+	const key = `${state.tx.length}|${last}|${filed}|${subList(state).length}`;
+	const hit = pastCache.get(state.tx);
+	if (hit && hit.key === key) return hit.map;
+	const map = /* @__PURE__ */ new Map();
+	for (const t of state.tx) {
+		if (t.type !== "expense" || !t.sub) continue;
+		const s = subOf(state, t);
+		if (!s) continue;
+		const k = fold$5(t.note).trim();
+		const prev = map.get(k);
+		if (!prev || (t.updatedAt || 0) > (prev.t.updatedAt || 0)) map.set(k, {
+			t,
+			s
+		});
+	}
+	pastCache.set(state.tx, {
+		key,
+		map
+	});
+	return map;
+}
+function suggestSub(state, note, { category = null } = {}) {
+	if (!String(note || "").trim()) return null;
+	const free = isOther$1(category);
+	const ok = (s) => s && !s.archived && (free || s.parent === category) && state.settings.categories.some((c) => c.id === s.parent && c.type === "expense");
+	const mem = memorySub(state, note);
+	if (ok(mem)) return {
+		sub: mem,
+		source: "memory"
+	};
+	const past = pastIndex(state).get(fold$5(note).trim());
+	if (past && ok(past.s)) return {
+		sub: past.s,
+		source: "past"
+	};
+	const named = nameSub(state, note, ok);
+	if (named) return {
+		sub: named,
+		source: "name"
+	};
+	for (const key of keywordKeys(note)) {
+		const s = subList(state).find((x) => x.key === key && ok(x));
+		if (s) return {
+			sub: s,
+			source: "words"
+		};
+	}
+	return null;
+}
+var HALF_LIFE_DAYS = 180;
+var DAY$5 = 864e5;
+var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+var STOP$3 = new Set("plata platii plati pentru from with the and for at to of in on by la de din si cu pe al ale card pos atm srl sa ii ip md mda chisinau chisinaului balti moldova str nr bd bul via transfer payment purchase pay paid achitare cumparare comision operatiune tranzactie tranzactia retragere online web www com net org ltd llc inc gmbh ooo maib micb victoriabank moldindconbank eximbank fincombank energbank paynet mpay revolut visa mastercard оплата покупка перевод платеж для ооо".split(" "));
+var FAMILY = /* @__PURE__ */ new Set([
+	"uber",
+	"bolt",
+	"yandex",
+	"google",
+	"apple",
+	"amazon",
+	"paypal",
+	"steam",
+	"microsoft"
+]);
+function merchantOf$1(note) {
+	const words = fold$4(note).replace(/#[\p{L}\p{N}_-]+/gu, " ").replace(/[\p{N}]+/gu, " ").replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2 && !STOP$3.has(w));
+	if (!words.length) return "";
+	return FAMILY.has(words[0]) && words[1] ? `${words[0]} ${words[1]}` : words[0];
+}
+var isOther = (id) => id === "other" || id === "other-in";
+var validCat = (state, id, type) => (state.settings?.categories || []).some((c) => c.id === id && c.type === type && !c.archived);
+/** A record that counts as your own choice (not a guess, not unconfirmed). */
+function isEvidence(t) {
+	if (!t || t.type !== "expense" && t.type !== "income" || t.loan || t.reconcile) return false;
+	if (!t.category || isOther(t.category) || t.catBy === "auto") return false;
+	if ((t.source === "capture" || t.source === "auto") && !t.confirmedAt) return false;
+	return true;
+}
+var cache$1 = /* @__PURE__ */ new WeakMap();
+function choiceTable(state, now = Date.now()) {
+	const tx = state.tx || [];
+	let last = 0;
+	for (const t of tx) if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
+	const key = `${tx.length}|${last}|${Math.floor(now / DAY$5)}`;
+	const hit = cache$1.get(tx);
+	if (hit && hit.key === key) return hit.table;
+	const table = /* @__PURE__ */ new Map();
+	for (const t of tx) {
+		if (!isEvidence(t)) continue;
+		const m = merchantOf$1(t.note);
+		if (!m) continue;
+		const k = `${t.type}|${m}`;
+		let row = table.get(k);
+		if (!row) table.set(k, row = {
+			merchant: m,
+			type: t.type,
+			cats: /* @__PURE__ */ new Map(),
+			subs: /* @__PURE__ */ new Map(),
+			books: /* @__PURE__ */ new Map(),
+			n: 0,
+			last: "",
+			label: t.note
+		});
+		const at = Date.parse(`${t.date}T12:00:00Z`);
+		const w = Number.isFinite(at) ? Math.pow(.5, Math.max(0, now - at) / (HALF_LIFE_DAYS * DAY$5)) : 1;
+		row.cats.set(t.category, (row.cats.get(t.category) || 0) + w);
+		if (t.sub) row.subs.set(`${t.category}|${t.sub}`, (row.subs.get(`${t.category}|${t.sub}`) || 0) + w);
+		const book = t.book ?? "personal";
+		row.books.set(book, (row.books.get(book) || 0) + w);
+		row.n++;
+		if (String(t.date) >= row.last) {
+			row.last = String(t.date);
+			row.label = t.note;
+		}
+	}
+	cache$1.set(tx, {
+		key,
+		table
+	});
+	return table;
+}
+var top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1]);
+var sum$1 = (map) => [...map.values()].reduce((a, b) => a + b, 0);
+var levelOf = (confidence, n) => confidence >= .9 && n >= 3 ? "sure" : confidence >= .6 ? "maybe" : "guess";
+/** An explicit rule ("contains linella -> Food") for a note: the longest match wins. */
+function ruleFor(state, note, type) {
+	const n = fold$4(note);
+	if (!n) return null;
+	return (state.settings?.rules || []).filter((r) => r && r.match && (r.type === type || r.type === "any") && n.includes(fold$4(r.match)) && validCat(state, r.category, type)).sort((a, b) => b.match.length - a.match.length)[0] || null;
+}
+/** What your records say about this merchant (no rules, no keywords), or null. */
+function merchantChoice(state, note, type, now = Date.now()) {
+	const m = merchantOf$1(note);
+	if (!m) return null;
+	const row = choiceTable(state, now).get(`${type}|${m}`);
+	if (!row) return null;
+	const cats = top(row.cats).filter(([id]) => validCat(state, id, type));
+	if (!cats.length) return null;
+	const total = sum$1(row.cats);
+	const confidence = Math.round(cats[0][1] / total * 100) / 100;
+	const subs = top(row.subs).filter(([k]) => k.startsWith(`${cats[0][0]}|`));
+	const books = top(row.books);
+	const book = books.length && books[0][1] / sum$1(row.books) >= .9 ? books[0][0] : null;
+	return {
+		merchant: m,
+		category: cats[0][0],
+		sub: subs.length && subs[0][1] / cats[0][1] >= .6 ? subs[0][0].split("|")[1] : null,
+		book,
+		confidence,
+		n: row.n,
+		level: levelOf(confidence, row.n),
+		alternatives: cats.map(([id, w]) => ({
+			category: id,
+			confidence: Math.round(w / total * 100) / 100
+		}))
+	};
+}
+function usual(state, type, now) {
+	const from = (/* @__PURE__ */ new Date(now - 90 * DAY$5)).toISOString().slice(0, 10);
+	const n = /* @__PURE__ */ new Map();
+	for (const t of state.tx || []) if (t.type === type && !isOther(t.category) && String(t.date) >= from) n.set(t.category, (n.get(t.category) || 0) + 1);
+	return top(n).map(([id]) => id);
+}
+/**
+* The suggestion for a note: category, subcategory, book, how sure, why, and
+* up to 3 chips (`alternatives`). `guess` is Finance's own keyword guess
+* (model.js suggestCategory), used after rules and your records.
+*/
+function suggest$1(state, { note, type = "expense" }, { guess = null, now = Date.now(), chips = 3 } = {}) {
+	const m = merchantOf$1(note);
+	const rule = ruleFor(state, note, type);
+	const mine = merchantChoice(state, note, type, now);
+	let out;
+	if (rule) out = {
+		category: rule.category,
+		sub: rule.sub || null,
+		book: rule.book || mine?.book || null,
+		confidence: 1,
+		level: "sure",
+		why: "rule",
+		rule: rule.id,
+		n: mine?.n || 0
+	};
+	else if (mine) out = {
+		category: mine.category,
+		sub: mine.sub,
+		book: mine.book,
+		confidence: mine.confidence,
+		level: mine.level,
+		why: "merchant",
+		n: mine.n
+	};
+	else if (guess && validCat(state, guess, type) && !isOther(guess)) out = {
+		category: guess,
+		sub: null,
+		book: null,
+		confidence: .3,
+		level: "guess",
+		why: "keyword",
+		n: 0
+	};
+	else out = {
+		category: null,
+		sub: null,
+		book: null,
+		confidence: 0,
+		level: "guess",
+		why: "none",
+		n: 0
+	};
+	const list = [
+		out.category,
+		...(mine?.alternatives || []).map((a) => a.category),
+		guess,
+		...usual(state, type, now),
+		...(state.settings?.categories || []).filter((c) => c.type === type).map((c) => c.id)
+	];
+	const seen = /* @__PURE__ */ new Set();
+	out.alternatives = list.filter((id) => id && !isOther(id) && validCat(state, id, type) && !seen.has(id) && seen.add(id)).slice(0, chips);
+	out.merchant = m;
+	return out;
+}
+/**
+* Two copies of the rules list: by id, the newer one wins; a rule without
+* `updatedAt` (made before phase 5, or by an older device) counts as old as
+* its side's settings. Tombstoned ids are dropped, so an older device's stale
+* list can't bring a deleted rule back, and a new rule it never saw stays.
+*/
+function mergeRules(local = [], remote = [], deleted = {}, localAt = 0, remoteAt = 0) {
+	const by = /* @__PURE__ */ new Map();
+	const own = /* @__PURE__ */ new Map();
+	const put = (r, at) => {
+		if (!r || typeof r !== "object" || !r.match) return;
+		const id = r.id || `rule-${fold$4(r.match)}-${r.type || "expense"}`;
+		const x = {
+			...r,
+			id,
+			updatedAt: r.updatedAt || at || 0
+		};
+		const mine = by.get(id);
+		if (!mine || x.updatedAt > mine.updatedAt || x.updatedAt === mine.updatedAt && JSON.stringify(x) > JSON.stringify(mine)) {
+			by.set(id, x);
+			own.set(id, r.updatedAt || r.createdAt || 0);
+		}
+	};
+	for (const r of Array.isArray(local) ? local : []) put(r, localAt);
+	for (const r of Array.isArray(remote) ? remote : []) put(r, remoteAt);
+	return [...by.values()].filter((r) => !(deleted[r.id] && deleted[r.id] >= (own.get(r.id) ?? r.updatedAt)));
+}
+// src/renderer/public/apps/finance/js/archive.js
+var yearOf = (d) => String(d || "").slice(0, 4);
+function applyTx(bal, t) {
+	if (t.type === "income") bal[t.account] = (bal[t.account] || 0) + t.amount;
+	else if (t.type === "expense") bal[t.account] = (bal[t.account] || 0) - t.amount;
+	else if (t.type === "transfer") {
+		bal[t.from] = (bal[t.from] || 0) - t.amount;
+		bal[t.to] = (bal[t.to] || 0) + (Number.isInteger(t.toAmount) ? t.toAmount : t.amount);
+	}
+}
+function openingOf(list) {
+	const bal = {};
+	for (const t of list) applyTx(bal, t);
+	for (const k of Object.keys(bal)) if (!bal[k] || k === "undefined") delete bal[k];
+	return bal;
+}
+var ruleMade = (t) => typeof t?.id === "string" && t.id.startsWith("rec-") && !!t.recurring && (t.updatedAt || 0) === (t.createdAt || 0);
+var buried = (t, deleted) => {
+	const gone = deleted?.[t?.id];
+	return !!gone && (gone >= (t.updatedAt || 0) || ruleMade(t));
+};
+function archivedTx(state) {
+	const years = state?.settings?.archive?.years;
+	if (!years) return [];
+	return Object.keys(years).sort().flatMap((y) => years[y] || []);
+}
+function archivedBalanceUpTo(state, upTo, bal) {
+	const a = state.settings.archive;
+	if (!a?.cutoff) return;
+	if (!upTo || upTo >= a.cutoff) {
+		for (const [id, v] of Object.entries(a.opening || {})) if (id in bal) bal[id] += v;
+		return;
+	}
+	for (const t of archivedTx(state)) {
+		if (t.date > upTo) continue;
+		const tmp = {};
+		applyTx(tmp, t);
+		for (const [id, v] of Object.entries(tmp)) if (id in bal) bal[id] += v;
+	}
+}
+var keptIds = (state) => new Set((state.goalAllocations || []).map((g) => g?.incomeId).filter(Boolean));
+var byDate$1 = (a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+function build(cutoff, at, archivedList) {
+	const years = {};
+	for (const t of [...archivedList].sort(byDate$1)) (years[yearOf(t.date)] ||= []).push(t);
+	return {
+		v: 1,
+		cutoff,
+		at,
+		opening: openingOf(archivedList),
+		years
+	};
+}
+var cache = /* @__PURE__ */ new WeakMap();
+function withArchive(state) {
+	if (!state?.settings?.archive?.cutoff) return state;
+	const a = state.settings.archive;
+	const hit = cache.get(state.tx);
+	if (hit && hit.a === a && hit.base === state.settings) return hit.out;
+	const { archive: _gone, ...rest } = state.settings;
+	const out = {
+		...state,
+		tx: [...archivedTx(state), ...state.tx],
+		settings: rest
+	};
+	cache.set(state.tx, {
+		a,
+		base: state.settings,
+		out
+	});
+	return out;
+}
+function forRange(state, from) {
+	const c = state?.settings?.archive?.cutoff;
+	return c && from < c ? withArchive(state) : state;
+}
+function settleArchive(mergedTx, localState, remoteState, deleted = {}) {
+	const A = localState?.settings?.archive;
+	const B = remoteState?.settings?.archive;
+	if (!A && !B) return {
+		tx: mergedTx,
+		archive: void 0
+	};
+	const winner = (() => {
+		if (!A) return B;
+		if (!B) return A;
+		const ta = Number(A.at) || 0;
+		const tb = Number(B.at) || 0;
+		if (ta !== tb) return ta > tb ? A : B;
+		return (A.cutoff || "") >= (B.cutoff || "") ? A : B;
+	})();
+	const byId = /* @__PURE__ */ new Map();
+	const add = (t) => {
+		if (!t || !t.id || buried(t, deleted)) return;
+		const mine = byId.get(t.id);
+		if (!mine || (t.updatedAt || 0) > (mine.updatedAt || 0)) byId.set(t.id, t);
+	};
+	for (const t of mergedTx) add(t);
+	for (const t of archivedTx(localState)) add(t);
+	for (const t of archivedTx(remoteState)) add(t);
+	const alive = [...byId.values()];
+	const at = Number(winner.at) || 0;
+	if (!winner.cutoff) return {
+		tx: alive,
+		archive: {
+			v: 1,
+			cutoff: "",
+			at,
+			opening: {},
+			years: {}
+		}
+	};
+	const keep = keptIds({ goalAllocations: [...localState.goalAllocations || [], ...remoteState.goalAllocations || []] });
+	const moved = alive.filter((t) => typeof t.date === "string" && t.date < winner.cutoff && !keep.has(t.id));
+	const movedIds = new Set(moved.map((t) => t.id));
+	return {
+		tx: alive.filter((t) => !movedIds.has(t.id)),
+		archive: build(winner.cutoff, at, moved)
+	};
+}
+var ACCOUNT_DEFAULTS = {
+	bank: "",
+	kind: "cash",
+	currency: "MDL",
+	start: 0,
+	last4: "",
+	color: 1,
+	savings: false,
+	archived: false,
+	holdings: []
+};
+function defaultState() {
+	const st = baseState();
+	ensureTree(st.settings);
+	return st;
+}
+function baseState() {
+	return {
+		version: 3,
+		settings: {
+			currency: "MDL",
+			jars: [
+				{
+					id: "savings",
+					name: "Deposit (safe)",
+					emoji: "🏦",
+					pct: 70,
+					savings: true
+				},
+				{
+					id: "living",
+					name: "Food & transport",
+					emoji: "🍔",
+					pct: 10
+				},
+				{
+					id: "growth",
+					name: "Investing & self-development",
+					emoji: "📈",
+					pct: 10
+				},
+				{
+					id: "care",
+					name: "Hygiene & cosmetics",
+					emoji: "🧴",
+					pct: 10
+				}
+			],
+			accounts: [
+				{
+					...ACCOUNT_DEFAULTS,
+					id: "wallet",
+					name: "Wallet",
+					kind: "cash",
+					emoji: "💵",
+					color: 2
+				},
+				{
+					...ACCOUNT_DEFAULTS,
+					id: "safe",
+					name: "Safe",
+					kind: "savings",
+					savings: true,
+					emoji: "🏦",
+					color: 1
+				},
+				{
+					...ACCOUNT_DEFAULTS,
+					id: "card",
+					name: "Card",
+					kind: "card",
+					emoji: "💳",
+					color: 5
+				}
+			],
+			categories: [
+				{
+					id: "work",
+					type: "income",
+					name: "Work",
+					emoji: "💼"
+				},
+				{
+					id: "family",
+					type: "income",
+					name: "Family",
+					emoji: "👪"
+				},
+				{
+					id: "side",
+					type: "income",
+					name: "Side jobs",
+					emoji: "🛠️"
+				},
+				{
+					id: "competitions",
+					type: "income",
+					name: "Competitions",
+					emoji: "🏆"
+				},
+				{
+					id: "gift-in",
+					type: "income",
+					name: "Gifts received",
+					emoji: "🎁"
+				},
+				{
+					id: "other-in",
+					type: "income",
+					name: "Other income",
+					emoji: "➕"
+				},
+				{
+					id: "food",
+					type: "expense",
+					name: "Food",
+					emoji: "🍔",
+					jar: "living"
+				},
+				{
+					id: "transport",
+					type: "expense",
+					name: "Transport",
+					emoji: "🚌",
+					jar: "living"
+				},
+				{
+					id: "home",
+					type: "expense",
+					name: "Home & bills",
+					emoji: "🏠",
+					jar: "living"
+				},
+				{
+					id: "family-out",
+					type: "expense",
+					name: "Family",
+					emoji: "💞",
+					jar: "living"
+				},
+				{
+					id: "gifts",
+					type: "expense",
+					name: "Gifts",
+					emoji: "🎁",
+					jar: "living"
+				},
+				{
+					id: "fun",
+					type: "expense",
+					name: "Fun & going out",
+					emoji: "🎉",
+					jar: "living"
+				},
+				{
+					id: "learning",
+					type: "expense",
+					name: "Learning & tools",
+					emoji: "📚",
+					jar: "growth"
+				},
+				{
+					id: "sport",
+					type: "expense",
+					name: "Sport & competitions",
+					emoji: "🥋",
+					jar: "growth"
+				},
+				{
+					id: "subscriptions",
+					type: "expense",
+					name: "Subscriptions",
+					emoji: "📱",
+					jar: "growth"
+				},
+				{
+					id: "investing",
+					type: "expense",
+					name: "Investing",
+					emoji: "📈",
+					jar: "growth"
+				},
+				{
+					id: "hygiene",
+					type: "expense",
+					name: "Hygiene & cosmetics",
+					emoji: "🧴",
+					jar: "care"
+				},
+				{
+					id: "health",
+					type: "expense",
+					name: "Health",
+					emoji: "💊",
+					jar: "care"
+				},
+				{
+					id: "clothes",
+					type: "expense",
+					name: "Clothes",
+					emoji: "👕",
+					jar: "care"
+				},
+				{
+					id: "other",
+					type: "expense",
+					name: "Other",
+					emoji: "📦",
+					jar: "living"
+				}
+			],
+			goal: {
+				name: "Safe goal",
+				target: 1e7,
+				account: "savings"
+			},
+			savingsAccount: "safe",
+			theme: "dark",
+			themeMotion: false,
+			sound: false,
+			smallPurchase: 1e4
+		},
+		tx: [],
+		people: [],
+		recurring: [],
+		invoices: [],
+		goals: [{
+			id: "g-main",
+			name: "Safe goal",
+			emoji: "🏦",
+			target: 1e7,
+			account: "savings",
+			saved: 0,
+			history: [],
+			deadline: null,
+			doneAt: null,
+			theme: "gold",
+			updatedAt: 0
+		}],
+		goalAllocations: [],
+		reconciliations: [],
+		netWorth: [],
+		deleted: {},
+		rates: null,
+		meta: {
+			lastBackup: null,
+			createdAt: null
+		}
+	};
+}
+function normalizeState(raw) {
+	const base = defaultState();
+	if (!raw || typeof raw !== "object") return base;
+	const s = raw.settings || {};
+	const accounts = (Array.isArray(s.accounts) && s.accounts.length ? s.accounts : base.settings.accounts).map((a, i) => {
+		const acc = {
+			...ACCOUNT_DEFAULTS,
+			color: i % 8 + 1,
+			...a,
+			holdings: Array.isArray(a.holdings) ? a.holdings : []
+		};
+		if (acc.id === "wallet" || /^(wallet|cash|numerar)$/i.test(acc.name || "")) {
+			if (acc.kind !== "cash") acc.kind = "cash";
+			if (!acc.emoji || acc.emoji === "💳") acc.emoji = "💵";
+		}
+		return acc;
+	});
+	if (!accounts.some((a) => a.kind === "cash" || a.id === "wallet" || /^(wallet|cash|numerar)$/i.test(a.name || ""))) accounts.unshift({
+		...ACCOUNT_DEFAULTS,
+		id: "wallet",
+		name: "Cash",
+		kind: "cash",
+		emoji: "💵",
+		color: 2
+	});
+	const settings = {
+		...base.settings,
+		...s,
+		goal: {
+			...base.settings.goal,
+			...s.goal || {}
+		},
+		jars: Array.isArray(s.jars) && s.jars.length ? s.jars : base.settings.jars,
+		accounts,
+		categories: Array.isArray(s.categories) && s.categories.length ? s.categories : base.settings.categories
+	};
+	if (Array.isArray(s.subcats)) settings.subcats = s.subcats.filter((x) => x && typeof x.id === "string" && typeof x.parent === "string" && x.name);
+	else if (Array.isArray(s.categories) && s.categories.length) delete settings.subcats;
+	if (s.subMemory && typeof s.subMemory === "object") settings.subMemory = { ...s.subMemory };
+	ensureTree(settings);
+	const baseCur = settings.currency || "MDL";
+	const accCur = Object.fromEntries(accounts.map((a) => [a.id, a.currency || baseCur]));
+	const tx = (Array.isArray(raw.tx) ? raw.tx : []).filter(validTx).map((t) => {
+		const currency = t.currency || accCur[t.account ?? t.from] || baseCur;
+		const out = {
+			...t,
+			currency,
+			updatedAt: t.updatedAt || t.createdAt || 0
+		};
+		if (!Number.isInteger(out.base)) {
+			out.base = currency === baseCur ? t.amount : Math.round(t.amount * (t.rate || 1));
+			out.rate = currency === baseCur ? 1 : t.rate || null;
+		}
+		return out;
+	});
+	const people = (Array.isArray(raw.people) ? raw.people : []).filter((p) => p && typeof p.id === "string" && p.name).map((p) => ({
+		note: "",
+		...p,
+		updatedAt: p.updatedAt || 0
+	}));
+	const deleted = raw.deleted && typeof raw.deleted === "object" ? { ...raw.deleted } : {};
+	return {
+		version: 3,
+		settings,
+		tx,
+		people,
+		recurring: (Array.isArray(raw.recurring) ? raw.recurring : []).filter((r) => r && typeof r.id === "string" && Number.isInteger(r.amount) && /^\d{4}-\d{2}-\d{2}$/.test(r.start || "")).map((r) => ({
+			every: "month",
+			currency: accCur[r.account] || baseCur,
+			note: "",
+			auto: false,
+			paused: false,
+			lastDone: null,
+			...r,
+			updatedAt: r.updatedAt || 0
+		})),
+		invoices: (Array.isArray(raw.invoices) ? raw.invoices : []).filter((i) => i && typeof i.id === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.date || "")).map((i) => ({
+			items: [],
+			note: "",
+			sent: false,
+			paidDate: null,
+			paidTx: null,
+			currency: "USD",
+			...i,
+			updatedAt: i.updatedAt || 0
+		})),
+		netWorth: (Array.isArray(raw.netWorth) ? raw.netWorth : []).filter((x) => x && /^\d{4}-\d{2}-\d{2}$/.test(x.date || "") && Number.isFinite(x.total)),
+		goals: Array.isArray(raw.goals) ? raw.goals.filter((g) => g && typeof g.id === "string" && g.name).map((g) => ({
+			emoji: "🎯",
+			account: "all",
+			saved: 0,
+			history: [],
+			deadline: null,
+			doneAt: null,
+			...g,
+			updatedAt: g.updatedAt || 0
+		})).map((g) => g.id === "g-main" && !g.updatedAt && g.account === "all" && g.name === "Safe goal" ? {
+			...g,
+			account: "savings"
+		} : g) : [{
+			id: "g-main",
+			name: settings.goal.name || "Safe goal",
+			emoji: "🏦",
+			target: settings.goal.target || 0,
+			account: settings.goal.account || "all",
+			saved: 0,
+			history: [],
+			deadline: null,
+			doneAt: null,
+			theme: "gold",
+			updatedAt: 0
+		}],
+		goalAllocations: (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === "string" && typeof a.goalId === "string" && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || "")).map((a) => ({
+			...a,
+			currency: a.currency || baseCur,
+			updatedAt: a.updatedAt || 0
+		})),
+		reconciliations: (Array.isArray(raw.reconciliations) ? raw.reconciliations : []).filter((r) => r && typeof r.id === "string" && typeof r.account === "string" && isValidISO(r.date || "") && Number.isSafeInteger(r.real)).map((r) => ({
+			adjustment: null,
+			...r,
+			updatedAt: r.updatedAt || 0
+		})),
+		deleted,
+		rates: raw.rates || (raw.lastRates?.usd?.MDL ? {
+			usd: { ...raw.lastRates.usd },
+			crypto: {},
+			history: {},
+			fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null,
+			synced: true
+		} : null),
+		meta: {
+			...base.meta,
+			...raw.meta || {}
+		}
+	};
+}
+function validTx(t) {
+	return t && typeof t.id === "string" && [
+		"income",
+		"expense",
+		"transfer"
+	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
+}
+var B$2 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
+var counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t);
+function sortTx(list) {
+	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
+}
+var category = (state, id) => state.settings.categories.find((c) => c.id === id);
+var account = (state, id) => state.settings.accounts.find((a) => a.id === id);
+function knownRates(state) {
+	const r = state.rates || null;
+	const baseCur = state.settings.currency || "MDL";
+	const need = new Set([baseCur, ...state.settings.accounts.map((a) => a.currency)].filter((c) => c && c !== "USD"));
+	const usd = { ...r?.usd || {} };
+	const missing = () => [...need].filter((c) => !(usd[c] > 0));
+	if (!missing().length) return r;
+	const hist = r?.history || {};
+	for (const d of Object.keys(hist).sort().reverse()) {
+		for (const c of missing()) if (hist[d][c] > 0) usd[c] = hist[d][c];
+		if (!missing().length) break;
+	}
+	if (missing().length) {
+		const perBase = {};
+		for (const t of sortTx(state.tx)) if (t.currency && t.currency !== baseCur && t.rate > 0 && !perBase[t.currency]) perBase[t.currency] = t.rate;
+		const basePerUsd = usd[baseCur] > 0 ? usd[baseCur] : perBase.USD;
+		if (basePerUsd > 0) {
+			usd[baseCur] = basePerUsd;
+			for (const c of missing()) if (perBase[c] > 0) usd[c] = basePerUsd / perBase[c];
+		}
+	}
+	return {
+		...r || {},
+		usd,
+		crypto: r?.crypto || {}
+	};
+}
+var savingsJar = (state) => state.settings.jars.find((j) => j.savings) || state.settings.jars[0];
+function accountBalances(state, upTo = null) {
+	const bal = Object.fromEntries(state.settings.accounts.map((a) => [a.id, a.start || 0]));
+	archivedBalanceUpTo(state, upTo, bal);
+	for (const t of state.tx) {
+		if (upTo && t.date > upTo) continue;
+		if (t.type === "income" && t.account in bal) bal[t.account] += t.amount;
+		else if (t.type === "expense" && t.account in bal) bal[t.account] -= t.amount;
+		else if (t.type === "transfer") {
+			if (t.from in bal) bal[t.from] -= t.amount;
+			if (t.to in bal) bal[t.to] += Number.isInteger(t.toAmount) ? t.toAmount : t.amount;
+		}
+	}
+	return bal;
+}
+function accountValues(state, upTo = null) {
+	const baseCur = state.settings.currency;
+	const bal = accountBalances(state, upTo);
+	const rates = knownRates(state);
+	return state.settings.accounts.map((a) => {
+		const own = bal[a.id] || 0;
+		let inBase = convert(own, a.currency, baseCur, rates);
+		let coins = 0;
+		let coinsKnown = true;
+		for (const h of a.holdings || []) {
+			const v = coinValue(Number(h.qty), h.asset, baseCur, rates);
+			if (v == null) coinsKnown = false;
+			else coins += v;
+		}
+		if (inBase != null) inBase += coins;
+		return {
+			account: a,
+			own,
+			coins,
+			coinsKnown,
+			inBase
+		};
+	});
+}
+var monthsBetweenKeys = (a, b) => {
+	const [ya, ma] = a.split("-").map(Number);
+	const [yb, mb] = b.split("-").map(Number);
+	return Math.max(0, (yb - ya) * 12 + (mb - ma));
+};
+var txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date) === key);
+function sumBy(list, keyFn) {
+	const out = /* @__PURE__ */ new Map();
+	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + signed$1(t, B$2(t)));
+	return [...out.entries()].map(([id, amount]) => ({
+		id,
+		amount
+	})).sort((a, b) => b.amount - a.amount);
+}
+function monthSummary(state, key) {
+	state = forRange(state, `${key}-01`);
+	const records = txInMonth(state, key);
+	const list = expandSplits(records);
+	const incomes = list.filter((t) => t.type === "income" && counts(t) && !isRefund(t));
+	const expenses = list.filter((t) => t.type === "expense" && counts(t));
+	const refunds = list.filter((t) => isRefund(t));
+	const income = incomes.reduce((a, t) => a + B$2(t), 0);
+	const expense = expenses.reduce((a, t) => a + B$2(t), 0) - refunds.reduce((a, t) => a + B$2(t), 0);
+	const net = income - expense;
+	return {
+		key,
+		income,
+		expense,
+		net,
+		savingsRate: income > 0 ? net / income : null,
+		byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
+		bySource: sumBy(incomes, (t) => t.category),
+		count: records.length,
+		expenses,
+		incomes,
+		refunds
+	};
+}
+var WORK_INCOME = /\b(work|job|jobs|client|clients|freelance|salary|salariu|lucru|proiect|project|invoice|factur\w*)\b/i;
+function isWorkIncome(state, catId) {
+	const c = category(state, catId);
+	if (!c || c.type !== "income") return false;
+	if (typeof c.work === "boolean") return c.work;
+	return c.id === "work" || c.id === "side" || WORK_INCOME.test(c.name || "");
+}
+var isWorkCost = (state, catId) => {
+	const c = category(state, catId);
+	return c?.type === "expense" && c.jar === "none";
+};
+var payOn = (state) => {
+	const p = state.settings.pay;
+	return !!(p?.on && p.buffer && p.to && p.amount > 0 && state.settings.accounts.some((a) => a.id === p.buffer));
+};
+function personalMonth(state, key) {
+	const s = monthSummary(state, key);
+	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B$2(t), 0);
+	const workCosts = [...s.expenses, ...s.refunds].filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
+	const otherIncome = s.income - workIncome;
+	const pay = payOn(state);
+	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B$2(t), 0) : 0;
+	const personalIncome = pay ? salary + otherIncome : s.income - workCosts;
+	const personalSpent = s.expense - workCosts;
+	const kept = personalIncome - personalSpent;
+	return {
+		key,
+		workIncome,
+		workCosts,
+		profit: workIncome - workCosts,
+		otherIncome,
+		salary,
+		pay,
+		personalIncome,
+		personalSpent,
+		kept,
+		rate: personalIncome > 0 ? kept / personalIncome : null
+	};
+}
+var BILLISH = /bill|rent|chiri|apart|utilit|factur|comunal|internet|subscript|abonam|insur|asigur|mortgage|ipotec|credit|coммун|аренд|квартир/i;
+var isBillCategory = (state, catId) => {
+	const c = category(state, catId);
+	if (!c) return false;
+	return typeof c.bill === "boolean" ? c.bill : c.id === "home" || c.id === "subscriptions" || BILLISH.test(c.name || "");
+};
+var mainGoal = (state) => (state.goals || []).find((g) => !g.doneAt && !g.archived) || (state.goals || [])[0] || {
+	...state.settings.goal,
+	id: "g-main"
+};
+function goalAllocationSummary(state, asOf = null) {
+	const base = state.settings.currency;
+	const cash = Math.max(0, accountValues(state, asOf).filter((v) => !v.account.archived && v.account.kind !== "crypto").reduce((sum, v) => sum + (v.inBase || 0), 0));
+	const rows = (state.goalAllocations || []).filter((a) => !asOf || a.date <= asOf).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id));
+	const byGoal = {}, byIncome = {}, effectiveById = {}, unpriced = [];
+	let reserved = 0, requested = 0;
+	for (const a of rows) {
+		const amount = a.currency && a.currency !== base ? convert(a.amount, a.currency, base, state.rates) : a.amount;
+		if (amount == null) unpriced.push(a.id);
+		const validAmount = Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
+		const goal = (state.goals || []).find((g) => g.id === a.goalId);
+		const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && countsAsIncome(t) && (!asOf || t.date <= asOf)) : null;
+		const incomeLeft = a.incomeId ? Math.max(0, (income ? B$2(income) : 0) - (byIncome[a.incomeId] || 0)) : Infinity;
+		const funded = goal?.account === "allocated" ? Math.min(validAmount, Math.max(0, cash - reserved), incomeLeft) : 0;
+		requested += validAmount;
+		effectiveById[a.id] = funded;
+		byGoal[a.goalId] = (byGoal[a.goalId] || 0) + funded;
+		if (a.incomeId) byIncome[a.incomeId] = (byIncome[a.incomeId] || 0) + validAmount;
+		reserved += funded;
+	}
+	return {
+		cash,
+		reserved,
+		requested,
+		unallocated: Math.max(0, cash - reserved),
+		unfunded: requested - reserved,
+		byGoal,
+		byIncome,
+		effectiveById,
+		unpriced
+	};
+}
+function goalValueAt(state, iso, goal = mainGoal(state)) {
+	if (goal.account === "allocated") return goalAllocationSummary(state, iso).byGoal[goal.id] || 0;
+	if (goal.account === "manual") return goal.saved || 0;
+	const vals = accountValues(state, iso);
+	const isSaving = (a) => a.savings || a.kind === "savings";
+	return (goal.account === "savings" ? vals.filter((v) => !v.account.archived && isSaving(v.account)) : goal.account && goal.account !== "all" ? vals.filter((v) => v.account.id === goal.account) : vals.filter((v) => !v.account.archived)).reduce((a, v) => a + (v.inBase ?? 0), 0);
+}
+function goalStatus$1(state, today, goal = mainGoal(state)) {
+	const current = goalValueAt(state, null, goal);
+	const target = goal.target || 0;
+	const thisMonth = monthKey(today);
+	const end = (k) => `${k}-${String(daysInMonth$1(k)).padStart(2, "0")}`;
+	const active = new Set((goal.account === "allocated" ? (state.goalAllocations || []).filter((a) => a.goalId === goal.id) : state.tx).map((t) => monthKey(t.date)));
+	const months = [...active].filter((k) => k < thisMonth).sort().slice(-3);
+	let pace = null;
+	if (goal.account !== "manual") {
+		if (months.length) {
+			const growth = months.map((k) => goalValueAt(state, end(k), goal) - goalValueAt(state, end(addMonths(k, -1)), goal));
+			pace = Math.round(growth.reduce((a, b) => a + b, 0) / months.length);
+		} else if (active.has(thisMonth)) pace = goalValueAt(state, today, goal) - goalValueAt(state, end(addMonths(thisMonth, -1)), goal);
+	} else if (goal.history?.length) {
+		const since = addDays$4(today, -90);
+		const added = goal.history.filter((h) => h.date >= since).reduce((a, h) => a + h.amount, 0);
+		pace = added ? Math.round(added / 3) : null;
+	}
+	const remaining = Math.max(0, target - current);
+	let monthsLeft = null;
+	let eta = null;
+	if (remaining === 0 && target > 0) monthsLeft = 0;
+	else if (pace && pace > 0) {
+		monthsLeft = Math.ceil(remaining / pace);
+		eta = addMonths(thisMonth, monthsLeft);
+	}
+	let perMonth = null;
+	let deadlineMonths = null;
+	if (goal.deadline && remaining > 0) {
+		deadlineMonths = Math.max(1, monthsBetweenKeys(thisMonth, monthKey(goal.deadline)) + (goal.deadline.slice(8) >= "15" ? 1 : 0));
+		perMonth = Math.ceil(remaining / deadlineMonths / 100) * 100;
+	}
+	const ratio = target ? Math.min(1, Math.max(0, current / target)) : 0;
+	const milestone = [
+		100,
+		75,
+		50,
+		25
+	].find((m) => ratio * 100 >= m) || 0;
+	return {
+		target,
+		current,
+		remaining,
+		ratio,
+		pace,
+		monthsLeft,
+		eta,
+		perMonth,
+		deadlineMonths,
+		milestone,
+		onTrack: perMonth == null ? null : pace != null && pace >= perMonth
+	};
+}
+var spentIn = (state, key, catId) => expandSplits(txInMonth(state, key)).filter((t) => (t.type === "expense" && counts(t) || isRefund(t)) && t.category === catId).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
+function budgetAlert(state, t) {
+	return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
+}
+function subBudgetAlert(state, t) {
+	const s = t.type === "expense" && counts(t) && !t.splits ? subOf(state, t) : null;
+	if (!(s?.budget > 0)) return null;
+	const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === "expense" && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B$2(x), 0);
+	const before = after - B$2(t);
+	const fmt = (x) => formatMoney$2(x, state.settings.currency);
+	if (before <= s.budget && after > s.budget) return {
+		level: "over",
+		text: `${s.name} is over budget: ${fmt(after)} of ${fmt(s.budget)} (${fmt(after - s.budget)} over).`
+	};
+	if (before < s.budget * .8 && after >= s.budget * .8) return {
+		level: "near",
+		text: `${s.name}: ${Math.round(after / s.budget * 100)}% of the budget used. ${fmt(s.budget - after)} left this month.`
+	};
+	return null;
+}
+function categoryBudgetAlert(state, t) {
+	const c = category(state, t.category);
+	if (t.type !== "expense" || !counts(t) || t.splits || !(c?.budget > 0)) return null;
+	const after = spentIn(state, monthKey(t.date), c.id);
+	const before = after - B$2(t);
+	const fmt = (x) => formatMoney$2(x, state.settings.currency);
+	if (before <= c.budget && after > c.budget) return {
+		level: "over",
+		text: `${c.name} is over budget: ${fmt(after)} of ${fmt(c.budget)} (${fmt(after - c.budget)} over).`
+	};
+	if (before < c.budget * .8 && after >= c.budget * .8) return {
+		level: "near",
+		text: `${c.name}: ${Math.round(after / c.budget * 100)}% of the budget used. ${fmt(c.budget - after)} left this month.`
+	};
+	return null;
+}
+var KEYWORDS = {
+	expense: [
+		["food", /food|mancare|mâncare|еда|продукт|magazin|market|lidl|kaufland|linella|pizza|burger|cafe|cafea|coffee|lunch|dinner|breakfast/i],
+		["transport", /transport|taxi|yandex|bolt|uber|bus|autobuz|troleibuz|metro|benzin|fuel|petrol|бензин|такси/i],
+		["gifts", /gift|cadou|подар|birthday|zi de nastere/i],
+		["subscriptions", /subscri|abonament|подписк|google|netflix|spotify|youtube|icloud|chatgpt|claude/i],
+		["hygiene", /hair|igien|cosmet|shampoo|sampon|soap|sapun|barber|frizer|uhod|косметик/i],
+		["health", /medic|pharm|farmac|doctor|dentist|аптек|лекар|vitamin/i],
+		["sport", /sport|gym|sala|black belt|centura|karate|judo|competi|turneu|dame|шашк|спорт/i],
+		["learning", /book|carte|course|curs|printer|culori|material|school|scoala|universit|math|matem|teach/i],
+		["clothes", /cloth|haine|shoe|pantofi|adidas|nike|одежд|обув/i],
+		["home", /rent|chirie|electric|gaz|apa|water|internet|telefon|phone|bill|factur|комм/i],
+		["fun", /cinema|film|movie|party|club|bar|game|joc|concert/i],
+		["family", /mother|mama|mom|brother|frate|sister|sora|family|familie|мама|брат/i]
+	],
+	income: [
+		["competitions", /competi|turneu|prize|premiu|dame|tournament|donation from/i],
+		["work", /work|job|salar|lucru|munca|serviciu|services|работ|зарплат|from work/i],
+		["side", /interview|freelance|client|order|comand|tutor|lesson|lectie|repair|sold|vandut/i],
+		["family", /mother|mama|mom|brother|frate|family|familie|father|tata|bunic|мама|папа|семь/i],
+		["gift-in", /gift|cadou|birthday|подар/i]
+	]
+};
+var fold$3 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+var STOP$2 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
+var words$1 = (note) => [...new Set(fold$3(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP$2.has(w));
+function matchRule(state, note, type) {
+	const n = fold$3(note);
+	if (!n) return null;
+	return (state.settings.rules || []).filter((r) => r.match && (r.type === type || r.type === "any") && n.includes(fold$3(r.match))).sort((a, b) => b.match.length - a.match.length)[0] || null;
+}
+var statsCache = /* @__PURE__ */ new WeakMap();
+function wordStats(state, type) {
+	let last = 0;
+	for (const t of state.tx) if (t.updatedAt > last) last = t.updatedAt;
+	const key = `${type}|${state.tx.length}|${last}`;
+	const hit = statsCache.get(state.tx);
+	if (hit?.[key]) return hit[key];
+	const out = /* @__PURE__ */ new Map();
+	for (const t of state.tx) {
+		if (t.type !== type || !t.note || t.category === "other" || t.category === "other-in") continue;
+		for (const w of words$1(t.note)) {
+			const m = out.get(w) || /* @__PURE__ */ new Map();
+			m.set(t.category, (m.get(t.category) || 0) + 1);
+			out.set(w, m);
+		}
+	}
+	statsCache.set(state.tx, {
+		...Object.keys(hit || {}).length < 4 ? hit : {},
+		[key]: out
+	});
+	return out;
+}
+function learnedCategory(state, note, type) {
+	const stats = wordStats(state, type);
+	let best = null;
+	for (const w of words$1(note)) {
+		const m = stats.get(w);
+		if (!m) continue;
+		const total = [...m.values()].reduce((a, b) => a + b, 0);
+		const [cat, n] = [...m.entries()].sort((a, b) => b[1] - a[1])[0];
+		if (n >= 2 && n / total >= .85 && (!best || n > best.n)) best = {
+			cat,
+			n
+		};
+	}
+	return best?.cat || null;
+}
+function suggestCategory(state, note, type) {
+	const n = (note || "").trim().toLowerCase();
+	if (!n || type === "transfer") return null;
+	const valid = (id) => state.settings.categories.some((c) => c.id === id && c.type === type);
+	const rule = matchRule(state, note, type);
+	if (rule && valid(rule.category)) return rule.category;
+	const sure = merchantChoice(state, note, type);
+	if (sure?.level === "sure" && valid(sure.category)) return sure.category;
+	const past = sortTx(state.tx).find((t) => t.type === type && (t.note || "").trim().toLowerCase() === n);
+	if (past && valid(past.category)) return past.category;
+	const mem = type === "expense" ? memorySub(state, note) : null;
+	if (mem && valid(mem.parent)) return mem.parent;
+	const learned = learnedCategory(state, note, type);
+	if (learned && valid(learned)) return learned;
+	for (const [id, re] of KEYWORDS[type] || []) if (re.test(n) && valid(id)) return id;
+	const sub = type === "expense" ? suggestSub(state, note) : null;
+	if (sub && valid(sub.sub.parent)) return sub.sub.parent;
+	return null;
+}
+// src/renderer/public/apps/finance/js/settingstamp.js
+/** Device-only settings: never travel. */
+var LOCAL_SETTINGS = [
+	"theme",
+	"themeInLife",
+	"themeMotion",
+	"logView"
+];
+/** Settings lists merged item by item (id + updatedAt, deletions in state.deleted). */
+var BY_ID = [
+	"wishlist",
+	"savedViews",
+	"customFields"
+];
+/** "Last done on" days: the later day wins, whoever saved last. */
+var LATER_DAY = ["cashCountLast", "checkupSnooze"];
+/** Keys with their own merge in sync.js. */
+var OWN_MERGE = [
+	"jars",
+	"incomeSources",
+	"accounts",
+	"categories",
+	"subcats",
+	"subMemory",
+	"rules",
+	"archive",
+	"budgets",
+	"checkupLast",
+	"updatedAt",
+	"changedAt"
+];
+var NOT_PLAIN = /* @__PURE__ */ new Set([
+	...LOCAL_SETTINGS,
+	...BY_ID,
+	...LATER_DAY,
+	...OWN_MERGE
+]);
+/** The plain keys of a settings object: merged key by key, by their change time. */
+var plainKeys = (settings) => Object.keys(settings || {}).filter((k) => !NOT_PLAIN.has(k));
+var same$1 = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/**
+* The plain keys of two settings objects, merged key by key. For a key whose
+* values differ: the later change time wins; with no time to compare (data
+* from before this, or from an older app version) the side that has the key,
+* then the side with the newer settings.updatedAt, as before.
+* Returns { values, changedAt } (a key missing from `values` is removed).
+*/
+function mergePlain(local = {}, remote = {}) {
+	const la = local.changedAt && typeof local.changedAt === "object" ? local.changedAt : {};
+	const ra = remote.changedAt && typeof remote.changedAt === "object" ? remote.changedAt : {};
+	const lt = local.updatedAt || 0;
+	const rt = remote.updatedAt || 0;
+	const values = {};
+	const changedAt = {};
+	for (const k of /* @__PURE__ */ new Set([...Object.keys(la), ...Object.keys(ra)])) changedAt[k] = Math.max(Number(la[k]) || 0, Number(ra[k]) || 0);
+	for (const k of /* @__PURE__ */ new Set([...plainKeys(local), ...plainKeys(remote)])) {
+		const a = local[k];
+		const b = remote[k];
+		const ta = Number(la[k]) || 0;
+		const tb = Number(ra[k]) || 0;
+		let mine;
+		if (same$1(a, b)) mine = true;
+		else if (ta !== tb) mine = ta > tb;
+		else if (a === void 0 || b === void 0) mine = b === void 0;
+		else if (lt !== rt) mine = lt > rt;
+		else mine = JSON.stringify(a) >= JSON.stringify(b);
+		const v = mine ? a : b;
+		if (v !== void 0) values[k] = v;
+	}
+	return {
+		values,
+		changedAt
+	};
+}
+// src/renderer/public/apps/finance/js/sync.js
+function toCloud(state, deviceId, now = Date.now()) {
+	const settings = { ...state.settings };
+	for (const k of LOCAL_SETTINGS) delete settings[k];
+	return {
+		app: "finance-helper",
+		schema: 3,
+		savedAt: now,
+		deviceId,
+		data: {
+			settings,
+			tx: state.tx,
+			people: state.people,
+			recurring: state.recurring || [],
+			invoices: state.invoices || [],
+			netWorth: state.netWorth || [],
+			goals: state.goals || [],
+			goalAllocations: state.goalAllocations || [],
+			reconciliations: state.reconciliations || [],
+			deleted: state.deleted,
+			...sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}
+		}
+	};
+}
+var FIAT_CODES = [
+	"MDL",
+	"USD",
+	"EUR",
+	"RON",
+	"GBP",
+	"UAH",
+	"CHF",
+	"PLN",
+	"TRY",
+	"CAD"
+];
+function sharedRates(rates) {
+	if (!rates?.usd || !rates.fetchedAt) return null;
+	const usd = {};
+	for (const c of FIAT_CODES) if (rates.usd[c] > 0) usd[c] = Math.round(rates.usd[c] * 1e4) / 1e4;
+	if (!usd.MDL) return null;
+	const d = new Date(rates.fetchedAt);
+	return {
+		date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
+		usd
+	};
+}
+function withRates(localRates, remote) {
+	const mine = sharedRates(localRates);
+	if (!remote?.usd?.MDL || !/^\d{4}-\d{2}-\d{2}$/.test(remote.date || "") || mine && mine.date >= remote.date) return localRates;
+	return {
+		...localRates || {},
+		usd: {
+			...localRates?.usd || {},
+			...remote.usd
+		},
+		crypto: localRates?.crypto || {},
+		history: localRates?.history || {},
+		fetchedAt: Date.parse(`${remote.date}T12:00:00`),
+		synced: true
+	};
+}
+function mergeList(a = [], b = [], deleted, preferB) {
+	const byId = /* @__PURE__ */ new Map();
+	for (const x of a || []) if (x && !buried(x, deleted)) byId.set(x.id, x);
+	for (const x of b || []) {
+		if (!x || buried(x, deleted)) continue;
+		const mine = byId.get(x.id);
+		if (!mine || (x.updatedAt || 0) > (mine.updatedAt || 0) || (x.updatedAt || 0) === (mine.updatedAt || 0) && (preferB ?? JSON.stringify(x) > JSON.stringify(mine))) byId.set(x.id, x);
+	}
+	return [...byId.values()];
+}
+var fingerprint$1 = (data) => JSON.stringify(data, (k, v) => {
+	if (k === "savedAt") return void 0;
+	if (v && typeof v === "object" && !Array.isArray(v)) return Object.fromEntries(Object.keys(v).sort().map((x) => [x, v[x]]));
+	return v;
+});
+function mergeLocal(local, stored) {
+	return mergeStates(local, toCloud(stored, "")).state;
+}
+function mergeStates(local, remote) {
+	if (!remote) return {
+		state: local,
+		pushNeeded: true,
+		pullChanged: false
+	};
+	if (remote.app !== "finance-helper" || !remote.data) throw new Error("The file in Google Drive is not Finance Helper data.");
+	if ((remote.schema || 1) > 3) throw new Error("Your data in Google Drive was saved by a newer version of the app. Update this app first (Settings → About & updates).");
+	const r = normalizeState({
+		...remote.data,
+		version: remote.schema
+	});
+	const deleted = { ...local.deleted };
+	for (const [id, ts] of Object.entries(r.deleted || {})) deleted[id] = Math.max(deleted[id] || 0, ts);
+	const newer = (r.settings.updatedAt || 0) > (local.settings.updatedAt || 0);
+	const plain = mergePlain(local.settings, r.settings);
+	const settings = { ...local.settings };
+	for (const k of plainKeys(local.settings)) delete settings[k];
+	Object.assign(settings, plain.values);
+	if (Object.keys(plain.changedAt).length) settings.changedAt = plain.changedAt;
+	settings.updatedAt = Math.max(local.settings.updatedAt || 0, r.settings.updatedAt || 0);
+	for (const k of BY_ID) {
+		const a = local.settings[k];
+		const b = r.settings[k];
+		if (!Array.isArray(a) && !Array.isArray(b)) continue;
+		const ta = Number(local.settings.changedAt?.[k]) || 0;
+		const tb = Number(r.settings.changedAt?.[k]) || 0;
+		const lt = local.settings.updatedAt || 0;
+		const rt = r.settings.updatedAt || 0;
+		const theirs = ta !== tb ? tb > ta : lt !== rt ? rt > lt : void 0;
+		const list = mergeList(a, b, deleted, theirs);
+		const ids = (l) => JSON.stringify((l || []).map((x) => x?.id));
+		const first = theirs ?? ids(b) > ids(a);
+		const pos = /* @__PURE__ */ new Map();
+		for (const x of [...first ? b || [] : a || [], ...first ? a || [] : b || []]) if (x && !pos.has(x.id)) pos.set(x.id, pos.size);
+		settings[k] = list.sort((x, y) => pos.get(x.id) - pos.get(y.id));
+	}
+	for (const k of LATER_DAY) {
+		const days = [local.settings[k], r.settings[k]].filter((d) => typeof d === "string" && d);
+		if (days.length) settings[k] = days.sort().at(-1);
+	}
+	settings.accounts = mergeList(local.settings.accounts, r.settings.accounts, deleted);
+	settings.accounts.sort((a, b) => (Number.isFinite(a.order) ? a.order : 1e6) - (Number.isFinite(b.order) ? b.order : 1e6));
+	settings.categories = mergeList(local.settings.categories, r.settings.categories, deleted);
+	settings.jars = mergeList(local.settings.jars, r.settings.jars, deleted);
+	if (Array.isArray(local.settings.incomeSources) || Array.isArray(r.settings.incomeSources)) settings.incomeSources = mergeList(local.settings.incomeSources, r.settings.incomeSources, deleted);
+	settings.subcats = mergeList(local.settings.subcats, r.settings.subcats, deleted);
+	if (Array.isArray(local.settings.budgets) || Array.isArray(r.settings.budgets)) settings.budgets = mergeList(local.settings.budgets, r.settings.budgets, deleted);
+	if (local.settings.checkupLast || r.settings.checkupLast) {
+		const last = { ...r.settings.checkupLast || {} };
+		for (const [id, d] of Object.entries(local.settings.checkupLast || {})) if (!last[id] || d > last[id]) last[id] = d;
+		settings.checkupLast = last;
+	}
+	if (Array.isArray(local.settings.rules) || Array.isArray(r.settings.rules)) settings.rules = mergeRules(local.settings.rules, r.settings.rules, deleted, local.settings.updatedAt || 0, r.settings.updatedAt || 0);
+	settings.subMemory = newer ? {
+		...local.settings.subMemory || {},
+		...r.settings.subMemory || {}
+	} : {
+		...r.settings.subMemory || {},
+		...local.settings.subMemory || {}
+	};
+	const merged = {
+		...local,
+		settings,
+		tx: mergeList(local.tx, r.tx, deleted),
+		people: mergeList(local.people, r.people, deleted),
+		recurring: mergeList(local.recurring, r.recurring, deleted),
+		invoices: mergeList(local.invoices, r.invoices, deleted),
+		netWorth: mergeList(local.netWorth, r.netWorth, deleted),
+		goals: mergeList(local.goals, r.goals, deleted),
+		goalAllocations: mergeList(local.goalAllocations, r.goalAllocations, deleted),
+		reconciliations: mergeList(local.reconciliations, r.reconciliations, deleted),
+		deleted,
+		rates: withRates(local.rates, remote.data.lastRates)
+	};
+	if (local.settings.archive || r.settings.archive) {
+		const s = settleArchive(merged.tx, local, r, deleted);
+		merged.tx = s.tx;
+		merged.settings = {
+			...merged.settings,
+			archive: s.archive
+		};
+	}
+	const localData = toCloud(local, "").data;
+	const mergedData = toCloud(merged, "").data;
+	return {
+		state: merged,
+		pullChanged: fingerprint$1(localData) !== fingerprint$1(mergedData),
+		pushNeeded: fingerprint$1(toCloud({
+			...r,
+			settings: { ...r.settings }
+		}, "").data) !== fingerprint$1(mergedData)
+	};
+}
+// src/renderer/src/web/bigStore.ts
+/** The website's changes waiting for a connection (web/mirror.ts). */
+var OUTBOX_KEY = OUTBOX_KEY$1;
+/** Money's own merge: the newest copy of each record wins, deletions stick (apps/finance/js/sync.js). */
+var moneyMerge = moneyMerge$1(mergeLocal, normalizeState);
+var createBigStore = createBigStore$1;
+var host;
+var hostLocal = null;
+/** This window's store (null where there is no localStorage: the server). */
+function hostStore() {
+	const ls = typeof localStorage === "undefined" ? null : localStorage;
+	if (host !== void 0 && ls === hostLocal) return host;
+	hostLocal = ls;
+	if (!ls) return host = null;
+	let channel = null;
+	try {
+		channel = typeof BroadcastChannel !== "undefined" ? new BroadcastChannel(CHANNEL) : null;
+	} catch {
+		channel = null;
+	}
+	const root = createBigStore({
+		local: ls,
+		channel,
+		merge: moneyMerge,
+		onError: (message) => {
+			if (typeof window !== "undefined" && typeof window.dispatchEvent === "function") window.dispatchEvent(new CustomEvent("life-big-store", { detail: { error: message } }));
+		}
+	});
+	host = typeof window !== "undefined" && typeof window.addEventListener === "function" ? root.forWindow(window) : root;
+	if (typeof window !== "undefined") window.__lifeStore = host;
+	return host;
+}
 // src/renderer/src/web/financeInbox.ts
 var SETTING$1 = "finance_inbox_json";
 var KEEP_DAYS = 60;
-var DAY$5 = 864e5;
+var DAY$4 = 864e5;
 var parse$3 = (raw, fallback) => {
 	try {
 		return raw ? JSON.parse(raw) : fallback;
@@ -31337,7 +34172,7 @@ function isApplied(e, state) {
 * stays, and the Money page warns from day 50 (inboxWarning).
 */
 function keepInbox(list, now, finance) {
-	const cutoff = now - KEEP_DAYS * DAY$5;
+	const cutoff = now - KEEP_DAYS * DAY$4;
 	return list.filter((e) => e.at >= cutoff || !isApplied(e, finance));
 }
 /** Adds an expense to the inbox (call inside the bot's change). */
@@ -31425,7 +34260,7 @@ function splitLine(line, delim) {
 	return out;
 }
 /** "-1.234,56 MDL", "(12.50)", "1 234.56" → a number, or null. */
-function parseAmount$2(raw) {
+function parseAmount$1(raw) {
 	let s = String(raw ?? "").replace(/[\s ']/g, "");
 	if (!s) return null;
 	let neg = false;
@@ -31537,7 +34372,7 @@ function parseBankCsv(text) {
 		const sample = body.slice(0, 10);
 		const n = Math.max(...sample.map((r) => r.length));
 		const share = (k, f) => sample.filter((r) => f(r[k] ?? "")).length / sample.length;
-		const isNum = (s) => /\d/.test(s) && parseAmount$2(s) != null && parseDate(s) == null;
+		const isNum = (s) => /\d/.test(s) && parseAmount$1(s) != null && parseDate(s) == null;
 		for (let k = 0; k < n; k++) if (col.date < 0 && share(k, (s) => parseDate(s) != null) >= .6) col.date = k;
 		for (let k = n - 1; k >= 0; k--) if (col.amount < 0 && k !== col.date && share(k, isNum) >= .6) col.amount = k;
 		let best = 0;
@@ -31552,10 +34387,10 @@ function parseBankCsv(text) {
 	for (const r of body) {
 		const date = parseDate(r[col.date] ?? "");
 		let amount = null;
-		if (col.amount >= 0) amount = parseAmount$2(r[col.amount] ?? "");
+		if (col.amount >= 0) amount = parseAmount$1(r[col.amount] ?? "");
 		else {
-			const d = parseAmount$2(r[col.debit] ?? "");
-			const c = parseAmount$2(r[col.credit] ?? "");
+			const d = parseAmount$1(r[col.debit] ?? "");
+			const c = parseAmount$1(r[col.credit] ?? "");
 			if (d) amount = -Math.abs(d);
 			else if (c) amount = Math.abs(c);
 		}
@@ -31675,7 +34510,7 @@ var bank_default = definePlugin({
 	}
 });
 // src/plugins/health/health.ts
-var addDays$4 = (day, n) => {
+var addDays$3 = (day, n) => {
 	const d = /* @__PURE__ */ new Date(`${day}T12:00:00Z`);
 	d.setUTCDate(d.getUTCDate() + n);
 	return d.toISOString().slice(0, 10);
@@ -31694,7 +34529,7 @@ function cleanHealth(body, today) {
 		error: "Send JSON: {\"weight\"?, \"steps\"?, \"sleepHours\"?, \"day\"?}"
 	};
 	const day = body.day == null || body.day === "" ? today : String(body.day).slice(0, 10);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays$4(today, -14)) return {
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today || day < addDays$3(today, -14)) return {
 		ok: false,
 		error: "day must be YYYY-MM-DD, within the last 14 days"
 	};
@@ -31748,7 +34583,7 @@ function mergeDay(data, input, at) {
 /** One line for what Ben knows: today's steps, last night's sleep and the 7-day average. */
 function healthLine(data, today) {
 	if (!data) return null;
-	const week = Array.from({ length: 7 }, (_, i) => addDays$4(today, -i));
+	const week = Array.from({ length: 7 }, (_, i) => addDays$3(today, -i));
 	const t = data.days[today];
 	const steps = week.map((d) => data.days[d]?.steps).filter((x) => x != null);
 	if (!t && !steps.length) return null;
@@ -33143,7 +35978,7 @@ function currentValue(g, checkins) {
 * measured as a share of the whole distance (5 % either side is on track,
 * 15 % behind is at risk, and so is "behind" with a tenth of the time left).
 */
-function goalStatus$1(g, value, today) {
+function goalStatus(g, value, today) {
 	const p = progressOf(g, value);
 	if (p >= 1 || g.doneDay) return "done";
 	if (today > g.deadline) return "missed";
@@ -33277,7 +36112,7 @@ function checkinStreak(g, checkins, today) {
 function goalCard(g, all, today) {
 	const mine = all.filter((c) => c.goalId === g.id).sort((a, b) => a.at.localeCompare(b.at));
 	const value = currentValue(g, mine);
-	const status = goalStatus$1(g, value, today);
+	const status = goalStatus(g, value, today);
 	const per = requiredPerDay(g, value, today);
 	const now = currentPerDay(g, mine, today);
 	const daysLeft = daysLeftOf(g, today);
@@ -33569,12 +36404,12 @@ function stepsFromText(text) {
 	}
 	return out.slice(0, 40);
 }
-var pad$11 = (n) => String(n).padStart(2, "0");
+var pad$9 = (n) => String(n).padStart(2, "0");
 var mondayOf$2 = (day) => addDays$8(day, -(((/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay() + 6) % 7));
 var lastOfMonth = (day) => {
 	const y = Number(day.slice(0, 4));
 	const m = Number(day.slice(5, 7));
-	return `${y}-${pad$11(m)}-${pad$11(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
+	return `${y}-${pad$9(m)}-${pad$9(new Date(Date.UTC(y, m, 0)).getUTCDate())}`;
 };
 /** The week (Monday–Sunday) or month a day is in. */
 function periodOf(per, day) {
@@ -33738,7 +36573,7 @@ var nice$1 = (n, unit) => {
 /** "45 min", "1h30" for hours. */
 var hoursText$1 = (h) => {
 	const m = Math.round(h * 60);
-	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$11(m % 60) : ""}`;
+	return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${m % 60 ? pad$9(m % 60) : ""}`;
 };
 var amount = (g, n) => {
 	if (g.unit === "hours") return hoursText$1(n);
@@ -34143,7 +36978,7 @@ var MILESTONE_RULE = "goal.milestone";
 var checkinRef = (goalId, period) => `goalci:${goalId}:${period}`;
 var milestoneRef = (goalId, index) => `goalms:${goalId}:${index}`;
 // src/core/goalsText.ts
-var MONTHS$4 = [
+var MONTHS$3 = [
 	"jan",
 	"feb",
 	"mar",
@@ -34157,8 +36992,8 @@ var MONTHS$4 = [
 	"nov",
 	"dec"
 ];
-var monthOf = (w) => MONTHS$4.indexOf(w.slice(0, 3).toLowerCase());
-var pad$10 = (n) => String(n).padStart(2, "0");
+var monthOf = (w) => MONTHS$3.indexOf(w.slice(0, 3).toLowerCase());
+var pad$8 = (n) => String(n).padStart(2, "0");
 var lastDay = (y, m) => new Date(Date.UTC(y, m, 0)).getUTCDate();
 var valid = (y, m, d) => m >= 1 && m <= 12 && d >= 1 && d <= lastDay(y, m);
 /** The first date in the text after today: "31 Dec", "Dec 31", "31.12", "2026-12-31", "end of month", "in 3 months", "by June". */
@@ -34167,8 +37002,8 @@ function parseDeadline(text, today) {
 	const y0 = Number(today.slice(0, 4));
 	const future = (y, m, d, yearGiven) => {
 		if (!valid(y, m, d)) return null;
-		let day = `${y}-${pad$10(m)}-${pad$10(d)}`;
-		if (!yearGiven && day < today) day = `${y + 1}-${pad$10(m)}-${pad$10(Math.min(d, lastDay(y + 1, m)))}`;
+		let day = `${y}-${pad$8(m)}-${pad$8(d)}`;
+		if (!yearGiven && day < today) day = `${y + 1}-${pad$8(m)}-${pad$8(Math.min(d, lastDay(y + 1, m)))}`;
 		return day;
 	};
 	let m = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(t);
@@ -34205,7 +37040,7 @@ function parseDeadline(text, today) {
 		const y = y0;
 		const mo = Number(today.slice(5, 7));
 		return {
-			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$10(mo)}-${pad$10(lastDay(y, mo))}`,
+			day: m[1] === "year" ? `${y}-12-31` : `${y}-${pad$8(mo)}-${pad$8(lastDay(y, mo))}`,
 			match: m[0]
 		};
 	}
@@ -34490,7 +37325,7 @@ var timeOf = (t) => {
 	let h = Number(m[1]);
 	if (m[3]?.toLowerCase() === "pm" && h < 12) h += 12;
 	if (m[3]?.toLowerCase() === "am" && h === 12) h = 0;
-	return h > 23 ? null : `${pad$10(h)}:${m[2] ?? "00"}`;
+	return h > 23 ? null : `${pad$8(h)}:${m[2] ?? "00"}`;
 };
 var PC_KIND = [
 	[/gam(e|es|ing)|steam|valorant|cs2|lol\b/i, "gaming"],
@@ -34990,67 +37825,6 @@ function careContext(s, db, now = /* @__PURE__ */ new Date()) {
 		return [];
 	}
 }
-// src/renderer/public/apps/finance/js/splits.js
-/** Can this record be split? Spent or Earned, not a loan, a move, an adjustment or a points buy. */
-var canSplit = (t) => !!t && (t.type === "expense" || t.type === "income") && !t.loan && !t.reconcile && !String(t.id || "").startsWith("life-reward-");
-/** The record's lines when they are good (two or more, each above 0 with a category, adding up), else null. */
-function validLines(t) {
-	if (!canSplit(t) || !Array.isArray(t.splits) || t.splits.length < 2) return null;
-	let sum = 0;
-	for (const l of t.splits) {
-		if (!l || typeof l !== "object" || !Number.isSafeInteger(l.amount) || l.amount <= 0 || typeof l.category !== "string" || !l.category) return null;
-		sum += l.amount;
-	}
-	return sum === t.amount ? t.splits : null;
-}
-/** Each line's share of `whole` (the record's base), the last one taking the rounding. */
-function shares(lines, total, whole) {
-	let left = whole;
-	return lines.map((l, i) => {
-		if (i === lines.length - 1) return left;
-		const v = total ? Math.round(l.amount * whole / total) : 0;
-		left -= v;
-		return v;
-	});
-}
-/** The record as its lines (a record that is not split: itself, alone). */
-function splitLines(t) {
-	const lines = validLines(t);
-	if (!lines) return [t];
-	const whole = Number.isInteger(t.base) ? t.base : t.amount;
-	const base = shares(lines, t.amount, whole);
-	return lines.map((l, i) => {
-		const out = {
-			...t,
-			amount: l.amount,
-			base: base[i],
-			category: l.category,
-			lineOf: t.id,
-			line: i
-		};
-		delete out.splits;
-		delete out.orig;
-		delete out.debt;
-		if (l.sub) out.sub = l.sub;
-		else delete out.sub;
-		const note = [t.note, l.note].map((x) => String(x || "").trim()).filter(Boolean).join(" · ");
-		if (note) out.note = note;
-		else delete out.note;
-		if (l.incomeSource) out.incomeSource = l.incomeSource;
-		return out;
-	});
-}
-/** A list with every split record replaced by its lines. The same array back when nothing is split. */
-function expandSplits(list) {
-	const arr = Array.isArray(list) ? list : [];
-	if (!arr.some((t) => t && t.splits)) return arr;
-	const out = [];
-	for (const t of arr) if (t && t.splits) out.push(...splitLines(t));
-	else out.push(t);
-	return out;
-}
-/** Every record of the state as lines: what totals count. */
-var linesOf = (state) => expandSplits(state?.tx || []);
 // src/renderer/src/web/botBrain.ts
 var MEMORY = "coach_memory";
 function loadMemory(db) {
@@ -36263,7 +39037,7 @@ function answerLocal(need, d) {
 	return `Points ${span}: +${l.filter((e) => e.coins > 0).reduce((t, e) => t + e.coins, 0)} earned, −${-l.filter((e) => e.coins < 0).reduce((t, e) => t + e.coins, 0)} spent.`;
 }
 /** Weekly letters from the coach (newest last). */
-var LETTERS$1 = "coach_letters";
+var LETTERS = "coach_letters";
 function loadLetters(db) {
 	try {
 		const l = JSON.parse(getSetting(db, "coach_letters") || "[]");
@@ -36273,7 +39047,7 @@ function loadLetters(db) {
 	}
 }
 function saveLetter(db, l) {
-	setSetting(db, LETTERS$1, JSON.stringify([...loadLetters(db).filter((x) => x.week !== l.week), l].slice(-12)));
+	setSetting(db, LETTERS, JSON.stringify([...loadLetters(db).filter((x) => x.week !== l.week), l].slice(-12)));
 }
 // src/core/readLinks.ts
 /** Limits: what one link or file may add to Ben's prompt. */
@@ -38054,7 +40828,7 @@ var SOURCES = [
 	"said",
 	"plan"
 ];
-var DAY$4 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
 var HM$3 = /^\d{2}:\d{2}$/;
 var num$1 = (x, lo, hi) => typeof x === "number" && Number.isFinite(x) ? Math.max(lo, Math.min(hi, Math.round(x))) : null;
 var strs = (x) => Array.isArray(x) ? x.filter((s) => typeof s === "string" && !!s.trim()).map((s) => s.slice(0, 120)).slice(0, 12) : void 0;
@@ -38088,7 +40862,7 @@ function cleanReview(raw) {
 		days
 	};
 	for (const [day, d] of Object.entries(src)) {
-		if (!DAY$4.test(day) || !d || typeof d.items !== "object") continue;
+		if (!DAY$3.test(day) || !d || typeof d.items !== "object") continue;
 		const items = {};
 		for (const [id, x] of Object.entries(d.items ?? {})) {
 			const it = cleanItem(x, id);
@@ -38495,7 +41269,7 @@ var DAYS$3 = [
 	"friday",
 	"saturday"
 ];
-var MONTHS$3 = [
+var MONTHS$2 = [
 	"january",
 	"february",
 	"march",
@@ -38510,7 +41284,7 @@ var MONTHS$3 = [
 	"december"
 ];
 var cap$2 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
-var pad$9 = (n) => String(n).padStart(2, "0");
+var pad$7 = (n) => String(n).padStart(2, "0");
 var toMin$3 = (hm) => Number(hm.slice(0, 2)) * 60 + Number(hm.slice(3, 5));
 function lev(a, b) {
 	const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -38530,7 +41304,7 @@ function dayWords(day, today) {
 	if (day === addDays$8(today, 1)) return "tomorrow";
 	const n = Math.round(((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getTime() - (/* @__PURE__ */ new Date(`${today}T12:00:00`)).getTime()) / 864e5);
 	if (n > 1 && n < 7) return cap$2(DAYS$3[wdayOf(day)]);
-	return `${Number(day.slice(8))} ${cap$2(MONTHS$3[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
+	return `${Number(day.slice(8))} ${cap$2(MONTHS$2[Number(day.slice(5, 7)) - 1]).slice(0, 3)}`;
 }
 var fail$1 = (ask) => ({ ask });
 var isFail = (x) => !!x && typeof x.ask === "string";
@@ -38576,11 +41350,11 @@ function parseQuick$1(input, ctx) {
 	let minutes = null;
 	const hmOf = (h, m, ap) => {
 		if (ap) {
-			if (h < 1 || h > 12 || m > 59) return fail$1(`I couldn't read ${h}:${pad$9(m)} ${ap} as a time. Try 7pm or 19:00.`);
-			return `${pad$9(h % 12 + (/^p/i.test(ap) ? 12 : 0))}:${pad$9(m)}`;
+			if (h < 1 || h > 12 || m > 59) return fail$1(`I couldn't read ${h}:${pad$7(m)} ${ap} as a time. Try 7pm or 19:00.`);
+			return `${pad$7(h % 12 + (/^p/i.test(ap) ? 12 : 0))}:${pad$7(m)}`;
 		}
-		if (h > 23 || m > 59) return fail$1(`I couldn't read ${h}:${pad$9(m)} as a time. Try 18:30.`);
-		return `${pad$9(h)}:${pad$9(m)}`;
+		if (h > 23 || m > 59) return fail$1(`I couldn't read ${h}:${pad$7(m)} as a time. Try 18:30.`);
+		return `${pad$7(h)}:${pad$7(m)}`;
 	};
 	const range = take(/(?:(?:\b(?:at|from)|@)\s*)?\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/i);
 	if (range) {
@@ -38678,22 +41452,22 @@ function parseQuick$1(input, ctx) {
 		day: addDays$8(today, Number(inN[1]) * (/^w/i.test(inN[2]) ? 7 : 1)),
 		raw: inN[0].trim()
 	});
-	const monthRe = MONTHS$3.map((m) => m.slice(0, 3)).join("|");
+	const monthRe = MONTHS$2.map((m) => m.slice(0, 3)).join("|");
 	const dm = take(new RegExp(`\\b(?:on\\s+)?(\\d{1,2})(?:st|nd|rd|th)?\\s+(?:of\\s+)?(${monthRe})[a-z]*\\b`, "i")) ?? take(new RegExp(`\\b(?:on\\s+)?(${monthRe})[a-z]*\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`, "i"));
 	if (dm) {
 		const [a, b] = [dm[1], dm[2]];
-		const mon = MONTHS$3.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
+		const mon = MONTHS$2.findIndex((m) => m.startsWith((/\d/.test(a) ? b : a).toLowerCase().slice(0, 3)));
 		const d = Number(/\d/.test(a) ? a : b);
 		if (mon < 0 || d < 1 || d > 31) return {
 			ok: false,
 			ask: `I couldn't read "${dm[0].trim()}" as a date. Try 20 Nov.`
 		};
 		let y = Number(today.slice(0, 4));
-		let day = `${y}-${pad$9(mon + 1)}-${pad$9(d)}`;
-		if (day < today) day = `${++y}-${pad$9(mon + 1)}-${pad$9(d)}`;
+		let day = `${y}-${pad$7(mon + 1)}-${pad$7(d)}`;
+		if (day < today) day = `${++y}-${pad$7(mon + 1)}-${pad$7(d)}`;
 		if ((/* @__PURE__ */ new Date(`${day}T12:00:00`)).getDate() !== d) return {
 			ok: false,
-			ask: `There is no ${d} ${cap$2(MONTHS$3[mon])}. Which day?`
+			ask: `There is no ${d} ${cap$2(MONTHS$2[mon])}. Which day?`
 		};
 		days.push({
 			day,
@@ -38831,7 +41605,7 @@ function parseQuick$1(input, ctx) {
 * its time; a time on the task itself would read as a deadline to the plan audit).
 */
 function todoistText(t, today, o = {}) {
-	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$3[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
+	const due = t.day === today ? "today" : t.day === addDays$8(today, 1) ? "tomorrow" : `${Number(t.day.slice(8))} ${cap$2(MONTHS$2[Number(t.day.slice(5, 7)) - 1]).slice(0, 3)}${t.day.slice(0, 4) === today.slice(0, 4) ? "" : ` ${t.day.slice(0, 4)}`}`;
 	return [
 		t.title,
 		due + (t.time && !o.noTime ? ` at ${t.time}` : ""),
@@ -43359,7 +46133,7 @@ var Mirror = class Mirror {
 					}] : []
 				];
 				if (behind) {
-					this.queueOffline(queued());
+					await this.queueOffline(queued());
 					this.persist();
 					this.emit();
 					return result;
@@ -43405,7 +46179,7 @@ var Mirror = class Mirror {
 					if (isOffline(e) || typeof window !== "undefined" && isRetryable(e)) {
 						if (e instanceof UnauthorizedError) this.locked = true;
 						this.nextFlushAt = Date.now() + retryDelay(this.flushFails++, { base: Mirror.RETRY_BASE });
-						this.queueOffline(queued());
+						await this.queueOffline(queued());
 						this.persist();
 						this.emit();
 						return result;
@@ -43465,7 +46239,7 @@ var Mirror = class Mirror {
 			if (typeof localStorage !== "undefined") localStorage.setItem("life_writes_pruned", String(this.prunedAt));
 		} catch {}
 	}
-	static OUTBOX = "life_offline_writes";
+	static OUTBOX = OUTBOX_KEY;
 	offline = null;
 	outboxUnsaved = false;
 	/**
@@ -43477,7 +46251,7 @@ var Mirror = class Mirror {
 		if (this.offline) return this.offline;
 		let raw = null;
 		try {
-			raw = typeof localStorage !== "undefined" ? localStorage.getItem(Mirror.OUTBOX) : null;
+			raw = hostStore()?.getItem(Mirror.OUTBOX) ?? null;
 		} catch {
 			raw = null;
 		}
@@ -43510,32 +46284,43 @@ var Mirror = class Mirror {
 			return this.sinceMem ??= Date.now();
 		}
 	}
+	/**
+	* Keeps the waiting changes on this device. The list is in memory at once; the returned
+	* promise resolves when it is really stored (or could not be: then `outboxUnsaved` says so).
+	*/
 	saveOutbox(list) {
 		this.offline = list;
 		if (!list.length) this.sinceMem = null;
 		else this.sinceMem ??= Date.now();
 		if (this.outboxLocked) {
 			this.outboxUnsaved = list.length > 0;
-			return;
+			return Promise.resolve();
 		}
 		try {
-			if (typeof localStorage === "undefined") return;
+			const store = hostStore();
+			if (!store) return Promise.resolve();
 			if (list.length) {
-				localStorage.setItem(Mirror.OUTBOX, JSON.stringify(list));
-				if (!localStorage.getItem(Mirror.SINCE)) localStorage.setItem(Mirror.SINCE, String(this.sinceMem));
+				store.setItem(Mirror.OUTBOX, JSON.stringify(list));
+				try {
+					if (!store.getItem(Mirror.SINCE)) store.setItem(Mirror.SINCE, String(this.sinceMem));
+				} catch {}
 			} else {
-				localStorage.removeItem(Mirror.OUTBOX);
-				localStorage.removeItem(Mirror.SINCE);
+				store.removeItem(Mirror.OUTBOX);
+				store.removeItem(Mirror.SINCE);
 			}
 			this.outboxUnsaved = false;
+			return store.flush().catch(() => {
+				if (this.offline === list && list.length) this.outboxUnsaved = true;
+			});
 		} catch {
 			this.outboxUnsaved = list.length > 0;
+			return Promise.resolve();
 		}
 	}
-	queueOffline(batch) {
+	async queueOffline(batch) {
 		const list = [...this.outbox(), batch];
-		this.saveOutbox(list);
-		this.lastError = this.waitingNote(list.length);
+		await this.saveOutbox(list);
+		this.lastError = this.waitingNote((this.offline ?? list).length);
 		if (this.outboxUnsaved && typeof window !== "undefined" && typeof window.dispatchEvent === "function" && typeof CustomEvent !== "undefined") window.dispatchEvent(new CustomEvent("life-not-stored", { detail: { waiting: list.length } }));
 	}
 	/** What the sync status says about changes still waiting (CL7). */
@@ -44756,7 +47541,7 @@ var CAREER_CALLBACK = {
 			}
 			if (op === "p") {
 				const moved = Math.max(0, Math.round(Number(b) || 0));
-				const fin = financeStateFrom(db, typeof localStorage !== "undefined" ? localStorage : null);
+				const fin = financeStateFrom(db, hostStore());
 				const tx = (Array.isArray(fin?.tx) ? fin.tx : []).find((x) => String(x.id) === a);
 				const m = loadMoney(db);
 				setSetting(db, CAREER_MONEY, JSON.stringify({
@@ -47510,14 +50295,14 @@ var EXPERIMENTS = [
 		unit: "lei spent"
 	}
 ];
-var addDays$3 = (d, n) => {
+var addDays$2 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
 var avg = (s, from, to, countEmpty) => {
 	const days = [];
-	for (let d = from; d <= to; d = addDays$3(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
+	for (let d = from; d <= to; d = addDays$2(d, 1)) if (countEmpty || s[d] != null) days.push(s[d] ?? 0);
 	return days.length ? days.reduce((a, b) => a + b, 0) / days.length : null;
 };
 /** The experiment for your weakest area: how far each area is below its usual level (0 = fine, 1 = far off). */
@@ -47531,11 +50316,11 @@ function measureExperiment(state, series, today) {
 	if (!exp) return null;
 	const day = Math.min(7, Math.max(1, Math.round((Date.parse(`${today}T12:00:00Z`) - Date.parse(`${state.start}T12:00:00Z`)) / 864e5) + 1));
 	const counted = exp.metric === "workouts" || exp.metric === "spend" || exp.metric === "focus";
-	const before = avg(series, addDays$3(state.start, -14), addDays$3(state.start, -1), counted);
-	const end = addDays$3(state.start, 6) < today ? addDays$3(state.start, 6) : today;
+	const before = avg(series, addDays$2(state.start, -14), addDays$2(state.start, -1), counted);
+	const end = addDays$2(state.start, 6) < today ? addDays$2(state.start, 6) : today;
 	const during = avg(series, state.start, end, counted);
 	const changePct = before && during != null ? Math.round((during - before) / before * 100) : null;
-	const done = addDays$3(state.start, 6) < today;
+	const done = addDays$2(state.start, 6) < today;
 	const good = changePct != null && (exp.better === "up" ? changePct >= 5 : changePct <= -5);
 	const bad = changePct != null && (exp.better === "up" ? changePct <= -5 : changePct >= 5);
 	const verdict = changePct == null ? "Not enough data yet to compare." : good ? `It works: ${Math.abs(changePct)}% ${exp.better === "up" ? "more" : "less"} ${exp.unit} than before. Keep it.` : bad ? `It didn't help (${changePct > 0 ? "+" : ""}${changePct}%). Drop it and try another.` : `About the same (${changePct > 0 ? "+" : ""}${changePct}%). Keep it if it felt good.`;
@@ -47550,15 +50335,15 @@ function measureExperiment(state, series, today) {
 	};
 }
 // src/core/lifeReview.ts
-var addDays$2 = (d, n) => {
+var addDays$1 = (d, n) => {
 	const x = /* @__PURE__ */ new Date(`${d}T12:00:00Z`);
 	x.setUTCDate(x.getUTCDate() + n);
 	return x.toISOString().slice(0, 10);
 };
-var sum$1 = (s, today, from, to, counted) => {
+var sum = (s, today, from, to, counted) => {
 	const vals = [];
 	for (let k = from; k <= to; k++) {
-		const v = s[addDays$2(today, -k)];
+		const v = s[addDays$1(today, -k)];
 		if (v != null || counted) vals.push(v ?? 0);
 	}
 	return {
@@ -47572,8 +50357,8 @@ function lifeReview(series, urges, today) {
 	const gaps = {};
 	const area = (m, label, fmt, perDay, better) => {
 		const counted = m !== "sleep";
-		const w = sum$1(series[m], today, 0, 6, counted);
-		const u = sum$1(series[m], today, 7, 34, counted);
+		const w = sum(series[m], today, 0, 6, counted);
+		const u = sum(series[m], today, 7, 34, counted);
 		if (!w.n || !u.n) return;
 		const week = perDay ? w.total / w.n : w.total;
 		const usual = perDay ? u.total / u.n : u.total / u.n * 7;
@@ -47810,14 +50595,14 @@ var STARTER_NOTES = [
 	}
 ];
 var noteKey = (title) => title.trim().toLowerCase().replace(/\s+/g, " ");
-var words$1 = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
+var words = (s) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").split(/[^\p{L}\p{N}]+/u).filter((w) => w.length > 2);
 /** Search: title words count most, then body; newest first on a tie. */
 function searchNotes(notes, q) {
-	const w = words$1(q);
+	const w = words(q);
 	if (!w.length) return [...notes].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt.localeCompare(a.updatedAt));
 	return notes.map((n) => {
-		const t = new Set(words$1(n.title));
-		const b = words$1(n.body);
+		const t = new Set(words(n.title));
+		const b = words(n.body);
 		return {
 			n,
 			score: w.reduce((s, x) => s + (t.has(x) ? 5 : 0) + (b.filter((y) => y.startsWith(x)).length ? 1 + Math.min(3, b.filter((y) => y.startsWith(x)).length) / 3 : 0), 0)
@@ -49173,7 +51958,7 @@ function computeDailyExpenseSummary(expenses, day, dailyBudgetBani) {
 		byCategory
 	};
 }
-function formatMoney$2(bani, currency = "MDL") {
+function formatMoney$1(bani, currency = "MDL") {
 	return `${(bani / 100).toLocaleString(void 0, {
 		minimumFractionDigits: bani % 100 === 0 ? 0 : 2,
 		maximumFractionDigits: 2
@@ -51072,7 +53857,7 @@ function reasonFor(s, sig, i) {
 	return days != null && days <= 14 ? `About ${plural(days, "day")} of your usual earning.` : "A treat worth working towards.";
 }
 /** The row: the best fit of each size first, then the next best, at most 2 per kind of reward. */
-function suggest$1(i) {
+function suggest(i) {
 	const sig = signals(i.activity);
 	if (i.funOver) sig.gaming = {
 		score: .1,
@@ -52928,7 +55713,7 @@ var WORK_KINDS = [
 	"meeting",
 	"money"
 ];
-var DAY$3 = /^\d{4}-\d{2}-\d{2}$/;
+var DAY$2 = /^\d{4}-\d{2}-\d{2}$/;
 var json$3 = (s, d) => {
 	try {
 		return JSON.parse(String(s ?? "")) ?? d;
@@ -53234,7 +56019,7 @@ var GoalsService = class {
 		const type = prevMeta && input.id ? input.meta?.type ?? prevMeta.type : input.meta?.type ?? "target";
 		const period = isPeriodType(type);
 		const deadline = period && !input.deadline ? NO_END : String(input.deadline ?? "");
-		if (!DAY$3.test(deadline)) throw new LedgerError("Pick the deadline");
+		if (!DAY$2.test(deadline)) throw new LedgerError("Pick the deadline");
 		const today = this.wallet.today(now);
 		if (!input.id && deadline <= today) throw new LedgerError("The deadline needs to be after today");
 		const steps = type === "project" ? input.meta?.steps ?? prevMeta?.steps ?? [] : [];
@@ -53249,7 +56034,7 @@ var GoalsService = class {
 		} : { kind: "manual" };
 		const meta = SOURCES$1.find((s) => s.id === source.kind);
 		if (meta.needsArg && !source.arg && !argOptional(source.kind)) throw new LedgerError(`${meta.label}: which one? (${meta.needsArg})`);
-		const startDay = input.startDay && DAY$3.test(input.startDay) && input.startDay <= today ? input.startDay : today;
+		const startDay = input.startDay && DAY$2.test(input.startDay) && input.startDay <= today ? input.startDay : today;
 		let start = type !== "target" ? 0 : input.start == null || !Number.isFinite(Number(input.start)) ? null : Number(input.start);
 		if (start == null) start = isAuto(source) && !countsFromStart(source.kind) ? this.autoValue({
 			source,
@@ -53347,7 +56132,7 @@ var GoalsService = class {
 		if (!isPeriodType(meta.type) || isAuto(g.source)) throw new LedgerError("This goal counts itself");
 		if (!Number.isFinite(amount) || !amount || Math.abs(amount) > 1e7) throw new LedgerError("Type how much, e.g. 1");
 		const today = this.wallet.today(now);
-		const day = onDay && DAY$3.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
+		const day = onDay && DAY$2.test(onDay) && onDay <= today && periodOf(meta.per, onDay).key === periodOf(meta.per, today).key ? onDay : today;
 		return this.db.transaction(() => {
 			const before = this.checkins(id);
 			const dayHas = before.filter((c) => c.day === day && (c.by === "me" || c.by === "ben")).reduce((t, c) => t + c.value, 0);
@@ -53507,7 +56292,7 @@ var WEEKDAYS = [
 	"Saturday"
 ];
 /** Weekday of a YYYY-MM-DD (0 = Sunday), without local-time Date math. */
-function weekday$2(day) {
+function weekday$1(day) {
 	const [y, m, d] = day.split("-").map(Number);
 	return new Date(Date.UTC(y, m - 1, d)).getUTCDay();
 }
@@ -53590,7 +56375,7 @@ function insights(i, length = 364) {
 		t: 0
 	}));
 	for (const c of days) {
-		const w = byWd[weekday$2(c.day)];
+		const w = byWd[weekday$1(c.day)];
 		w.n++;
 		w.t += c.count;
 	}
@@ -53916,23 +56701,23 @@ var ProgressService = class {
 	}
 };
 // src/core/weekPlan.ts
-var weekday$1 = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
+var weekday = (day) => (/* @__PURE__ */ new Date(`${day}T12:00:00Z`)).getUTCDay();
 /**
 * The week a plan made today is for: this week's Monday, but on Sunday the
 * coming week (Sunday is planning day).
 */
 function planWeek(today) {
-	const wd = weekday$1(today);
+	const wd = weekday(today);
 	return wd === 0 ? addDays$8(today, 1) : addDays$8(today, 1 - wd);
 }
 /** The Monday of the week today is in (Sunday counts with the week before). */
 function currentWeek(today) {
-	const wd = weekday$1(today);
+	const wd = weekday(today);
 	return addDays$8(today, wd === 0 ? -6 : 1 - wd);
 }
 /** Sunday, or no plan for this week yet: time to plan. */
 function shouldPlan(plan, today) {
-	if (weekday$1(today) === 0) return !plan || plan.week !== planWeek(today);
+	if (weekday(today) === 0) return !plan || plan.week !== planWeek(today);
 	return !plan || plan.week !== currentWeek(today);
 }
 /** The plan in force today (made last Sunday or during this week). */
@@ -55809,9 +58594,9 @@ function rewardsMore(s, value, now = /* @__PURE__ */ new Date()) {
 		hasGoal: live.some((r) => r.goalRank),
 		funOver: pace.level === "over"
 	};
-	const suggestions = suggest$1(input);
+	const suggestions = suggest(input);
 	const shown = new Set(suggestions.map((x) => x.starter.key));
-	const unlockIdeas = suggest$1({
+	const unlockIdeas = suggest({
 		...input,
 		limit: 6,
 		only: (x) => !!x.unlock && !shown.has(x.key)
@@ -56018,7 +58803,7 @@ function unlockFacts(s, now = /* @__PURE__ */ new Date()) {
 var loadUnlocks = (db) => cleanUnlocks(json$2(db, REWARD_UNLOCKS));
 // src/renderer/src/web/webServices.ts
 /** Finance Helper's data on this device (else the synced copy). */
-var financeOf = (s) => financeStateFrom(s.db, typeof localStorage !== "undefined" ? localStorage : null);
+var financeOf = (s) => financeStateFrom(s.db, hostStore());
 /** RL1: the point value with Finance Helper's fun limit, spending, rates and your hour. */
 function shopValue(s, now = /* @__PURE__ */ new Date()) {
 	const finance = financeOf(s);
@@ -57381,7 +60166,7 @@ var AMOUNT_RES = [{
 	cur: 3
 }];
 /** "1 234,56" → 123456 cents; null when it isn't a plain amount. */
-function parseAmount$1(s) {
+function parseAmount(s) {
 	let t = String(s ?? "").replace(/[\s\u00a0\u202f]/g, "");
 	if (!/^\d[\d.,]*$/.test(t)) return null;
 	const last = Math.max(t.lastIndexOf("."), t.lastIndexOf(","));
@@ -57417,7 +60202,7 @@ function payAmounts(text) {
 	for (const { re, num, cur, sign } of AMOUNT_RES) {
 		re.lastIndex = 0;
 		for (let m = re.exec(text); m; m = re.exec(text)) {
-			const amount = parseAmount$1(m[num]);
+			const amount = parseAmount(m[num]);
 			const currency = currencyOf(m[cur]);
 			if (amount == null || !currency) continue;
 			if (NOT_AMOUNT_BEFORE.test(text.slice(Math.max(0, m.index - 40), m.index))) continue;
@@ -57453,7 +60238,7 @@ function cleanShop(s) {
 	if (!/\p{L}/u.test(t) || NOT_SHOP.test(t) || CARD_ONLY.test(t)) return "";
 	return t.slice(0, 60);
 }
-function merchantOf$1(text, title, hit, source, app) {
+function merchantOf(text, title, hit, source, app) {
 	const label = LABEL.exec(text);
 	if (label) {
 		const s = cleanShop(label[1].split(/[,;]|\s{2,}/)[0]);
@@ -57513,7 +60298,7 @@ function parsePayNotification(n, opts) {
 	if (source === "generic" && !refundWords && !PAYMENT.test(all)) return no("not-payment", "No payment words in it (paid, payment, plată, оплата…)");
 	const refund = refundWords || hit.sign === "+";
 	const card = LAST4.exec(all);
-	const merchant = merchantOf$1(inText, inText === title ? "" : title, hit, source, app);
+	const merchant = merchantOf(inText, inText === title ? "" : title, hit, source, app);
 	return {
 		ok: true,
 		amount: hit.amount,
@@ -57586,7 +60371,7 @@ function findTwin(list, p, windowMs = TWIN_WINDOW_MS) {
 var TOSORT_KEY = "money_tosort";
 /** Unreadable / ignored items kept for the review list (newest first). */
 var IGNORED_KEEP = 50;
-var DAY$2 = 864e5;
+var DAY$1 = 864e5;
 var DONE_KEEP_DAYS = 30;
 /** The stored value, read safely (anything odd reads as empty). */
 function readToSort(raw) {
@@ -57675,1874 +60460,10 @@ function keepToSort(list, finance, now) {
 	const has = (id) => !!id && (!!finance?.tx?.some((t) => t && t.id === id) || !!finance?.deleted?.[id]);
 	return { items: list.items.filter((x) => {
 		if (x.state === "new" || x.reopen) return true;
-		if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY$2) return true;
+		if (now - (x.updatedAt ?? x.at) < DONE_KEEP_DAYS * DAY$1) return true;
 		if (x.state === "dismissed") return false;
 		return !has(x.txId);
 	}) };
-}
-// src/renderer/public/apps/finance/js/money.js
-var LETTERS = /[^\d.,+\-*/()x×÷]/gi;
-function parseAmount(text) {
-	if (text == null) return null;
-	if (typeof text === "number") return Number.isFinite(text) ? Math.round(text * 100) : null;
-	let s = String(text).replace(/[\s  ]/g, "").replace(/[^\d.,-]/g, "");
-	if (!s || !/\d/.test(s)) return null;
-	const negative = s.startsWith("-");
-	s = s.replace(/-/g, "");
-	const n = toNumber(s);
-	if (n == null) return null;
-	return Math.round((negative ? -n : n) * 100);
-}
-function toNumber(s) {
-	const lastDot = s.lastIndexOf(".");
-	const lastComma = s.lastIndexOf(",");
-	if (lastDot >= 0 && lastComma >= 0) {
-		const dec = lastDot > lastComma ? "." : ",";
-		const thou = dec === "." ? "," : ".";
-		s = s.split(thou).join("").replace(dec, ".");
-	} else if (lastComma >= 0) s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
-	else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, "");
-	if (!/^\d*\.?\d*$/.test(s) || s === ".") return null;
-	const n = Number(s);
-	return Number.isFinite(n) ? n : null;
-}
-function evalAmount(text) {
-	if (text == null) return null;
-	const s = String(text).replace(/[\s  ]/g, "").replace(LETTERS, "").replace(/[x×]/gi, "*").replace(/÷/g, "/");
-	if (!s) return null;
-	if (!/[+*/()]/.test(s.slice(1)) && !/\d-/.test(s)) return parseAmount(s);
-	const tokens = s.match(/\d[\d.,]*|[+\-*/()]/g);
-	if (!tokens || tokens.join("") !== s) return null;
-	let i = 0;
-	const peek = () => tokens[i];
-	const next = () => tokens[i++];
-	function expr() {
-		let v = term();
-		while (peek() === "+" || peek() === "-") {
-			const op = next();
-			const r = term();
-			if (v == null || r == null) return null;
-			v = op === "+" ? v + r : v - r;
-		}
-		return v;
-	}
-	function term() {
-		let v = factor();
-		while (peek() === "*" || peek() === "/") {
-			const op = next();
-			const r = factor();
-			if (v == null || r == null) return null;
-			if (op === "/" && r === 0) return null;
-			v = op === "*" ? v * r : v / r;
-		}
-		return v;
-	}
-	function factor() {
-		const t = next();
-		if (t === "-") {
-			const v = factor();
-			return v == null ? null : -v;
-		}
-		if (t === "(") {
-			const v = expr();
-			if (next() !== ")") return null;
-			return v;
-		}
-		if (t && /^\d/.test(t)) return toNumber(t);
-		return null;
-	}
-	const v = expr();
-	if (v == null || i !== tokens.length || !Number.isFinite(v)) return null;
-	return Math.round(v * 100);
-}
-var MASK = "••••";
-var hidden = false;
-function formatMoney$1(cents, currency = "MDL", { sign = false, compact = false, reveal = false } = {}) {
-	if (hidden && !reveal) return MASK + (currency ? " " + currency : "");
-	const neg = cents < 0;
-	const abs = Math.abs(Math.round(cents));
-	let whole = Math.floor(abs / 100);
-	const frac = abs % 100;
-	let text;
-	if (compact && whole >= 1e4) {
-		const k = whole / 1e3;
-		text = (k >= 100 ? Math.round(k) : Math.round(k * 10) / 10).toString().replace(".", ",") + "k";
-	} else text = group(whole) + (frac ? "," + String(frac).padStart(2, "0") : "");
-	return (neg ? "−" : sign && cents > 0 ? "+" : "") + text + (currency ? "\xA0" + currency : "");
-}
-function group(n) {
-	return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "\xA0");
-}
-// src/renderer/public/apps/finance/js/dates.js
-var MONTHS$2 = [
-	"January",
-	"February",
-	"March",
-	"April",
-	"May",
-	"June",
-	"July",
-	"August",
-	"September",
-	"October",
-	"November",
-	"December"
-];
-var pad$8 = (n) => String(n).padStart(2, "0");
-function toISO(d) {
-	return `${d.getFullYear()}-${pad$8(d.getMonth() + 1)}-${pad$8(d.getDate())}`;
-}
-var monthKey = (iso) => iso.slice(0, 7);
-function monthLabel(key, short = false) {
-	const [y, m] = key.split("-").map(Number);
-	const name = MONTHS$2[m - 1];
-	return `${short ? name.slice(0, 3) : name} ${y}`;
-}
-function addMonths(key, n) {
-	const [y, m] = key.split("-").map(Number);
-	const idx = y * 12 + (m - 1) + n;
-	return `${Math.floor(idx / 12)}-${pad$8(idx % 12 + 1)}`;
-}
-function daysInMonth$1(key) {
-	const [y, m] = key.split("-").map(Number);
-	return new Date(Date.UTC(y, m, 0)).getUTCDate();
-}
-function utc(iso) {
-	const [y, m, d] = iso.split("-").map(Number);
-	return new Date(Date.UTC(y, m - 1, d));
-}
-function addDays$1(iso, n) {
-	const d = utc(iso);
-	d.setUTCDate(d.getUTCDate() + n);
-	return d.toISOString().slice(0, 10);
-}
-var daysBetween = (a, b) => Math.round((utc(b) - utc(a)) / 864e5);
-function weekday(iso) {
-	return utc(iso).getUTCDay();
-}
-var dowIndex = (iso) => (weekday(iso) + 6) % 7;
-var DOW_SHORT = [
-	"Mon",
-	"Tue",
-	"Wed",
-	"Thu",
-	"Fri",
-	"Sat",
-	"Sun"
-];
-function isValidISO(iso) {
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return false;
-	const d = utc(iso);
-	return toISO(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) === iso;
-}
-// src/renderer/public/apps/finance/js/catshare.js
-var isPointsReward = (t) => String(t?.id || "").startsWith("life-reward-");
-var isCorrection = (t) => !!t?.reconcile;
-var isRefund = (t) => t?.type === "income" && t.refund === true && !t.loan && !isCorrection(t) && !isPointsReward(t);
-var isNotCounted = (t) => t?.type === "income" && t.notIncome === true || t?.type === "expense" && t.notSpending === true;
-var countsAsSpending = (t) => t.type === "expense" && !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t) || isRefund(t);
-var countsAsIncome = (t) => t.type === "income" && !t.loan && !isCorrection(t) && !isRefund(t) && !isNotCounted(t);
-var signed$1 = (t, v) => isRefund(t) ? -v : v;
-// src/renderer/public/apps/finance/js/cattree.js
-var fold$5 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-var SUB_DEFAULTS = [
-	{
-		key: "groceries",
-		name: "Groceries",
-		emoji: "🛒",
-		homes: ["food"]
-	},
-	{
-		key: "restaurants",
-		name: "Restaurants",
-		emoji: "🍽️",
-		homes: ["food"]
-	},
-	{
-		key: "cafes",
-		name: "Cafés & coffee",
-		emoji: "☕",
-		homes: ["food"]
-	},
-	{
-		key: "delivery",
-		name: "Delivery",
-		emoji: "🛵",
-		homes: ["food"]
-	},
-	{
-		key: "snacks",
-		name: "Snacks",
-		emoji: "🍫",
-		homes: ["food"]
-	},
-	{
-		key: "fuel",
-		name: "Fuel",
-		emoji: "⛽",
-		homes: ["transport"]
-	},
-	{
-		key: "taxi",
-		name: "Taxi",
-		emoji: "🚕",
-		homes: ["transport"]
-	},
-	{
-		key: "public",
-		name: "Public transport",
-		emoji: "🚌",
-		homes: ["transport"]
-	},
-	{
-		key: "car",
-		name: "Car repairs",
-		emoji: "🔧",
-		homes: ["transport"]
-	},
-	{
-		key: "rent",
-		name: "Rent",
-		emoji: "🔑",
-		homes: ["home"]
-	},
-	{
-		key: "utilities",
-		name: "Utilities",
-		emoji: "💡",
-		homes: ["home", "bills"]
-	},
-	{
-		key: "internet",
-		name: "Internet & phone",
-		emoji: "📶",
-		homes: ["home", "bills"]
-	},
-	{
-		key: "furniture",
-		name: "Furniture",
-		emoji: "🛋️",
-		homes: ["home"]
-	},
-	{
-		key: "cleaning",
-		name: "Cleaning",
-		emoji: "🧽",
-		homes: ["home"]
-	},
-	{
-		key: "cosmetics",
-		name: "Cosmetics",
-		emoji: "💄",
-		homes: ["beauty", "health"]
-	},
-	{
-		key: "skincare",
-		name: "Skincare",
-		emoji: "🧴",
-		homes: ["beauty", "health"]
-	},
-	{
-		key: "haircut",
-		name: "Haircut",
-		emoji: "💇",
-		homes: ["beauty", "health"]
-	},
-	{
-		key: "pharmacy",
-		name: "Pharmacy",
-		emoji: "💊",
-		homes: ["health", "beauty"]
-	},
-	{
-		key: "doctor",
-		name: "Doctor",
-		emoji: "🩺",
-		homes: ["health", "beauty"]
-	},
-	{
-		key: "gym",
-		name: "Gym",
-		emoji: "🏋️",
-		homes: [
-			"sport",
-			"health",
-			"beauty"
-		]
-	},
-	{
-		key: "competitions",
-		name: "Competitions",
-		emoji: "🏆",
-		homes: ["sport"]
-	},
-	{
-		key: "gear",
-		name: "Sports gear",
-		emoji: "🎽",
-		homes: ["sport"]
-	},
-	{
-		key: "gadgets",
-		name: "Gadgets",
-		emoji: "📱",
-		homes: ["tech"]
-	},
-	{
-		key: "software",
-		name: "Software & AI",
-		emoji: "🤖",
-		homes: ["tech", "subscriptions"]
-	},
-	{
-		key: "games",
-		name: "Games",
-		emoji: "🎮",
-		homes: ["tech", "fun"]
-	},
-	{
-		key: "streaming",
-		name: "Streaming & music",
-		emoji: "📺",
-		homes: ["subscriptions", "fun"]
-	},
-	{
-		key: "apps",
-		name: "Apps & cloud",
-		emoji: "☁️",
-		homes: ["subscriptions", "tech"]
-	},
-	{
-		key: "clothes",
-		name: "Clothes",
-		emoji: "👕",
-		homes: ["shopping"]
-	},
-	{
-		key: "shoes",
-		name: "Shoes",
-		emoji: "👟",
-		homes: ["shopping"]
-	},
-	{
-		key: "accessories",
-		name: "Accessories",
-		emoji: "👜",
-		homes: ["shopping"]
-	},
-	{
-		key: "gifts",
-		name: "Gifts",
-		emoji: "🎁",
-		homes: ["gifts", "family"]
-	},
-	{
-		key: "support",
-		name: "Family support",
-		emoji: "💞",
-		homes: ["family", "gifts"]
-	},
-	{
-		key: "celebrations",
-		name: "Celebrations",
-		emoji: "🎂",
-		homes: ["gifts", "family"]
-	},
-	{
-		key: "goingout",
-		name: "Going out",
-		emoji: "🍻",
-		homes: ["fun"]
-	},
-	{
-		key: "cinema",
-		name: "Cinema",
-		emoji: "🎬",
-		homes: ["fun"]
-	},
-	{
-		key: "events",
-		name: "Events",
-		emoji: "🎟️",
-		homes: ["fun"]
-	},
-	{
-		key: "hobbies",
-		name: "Hobbies",
-		emoji: "🎨",
-		homes: ["fun"]
-	},
-	{
-		key: "travel",
-		name: "Travel",
-		emoji: "✈️",
-		homes: ["fun"]
-	},
-	{
-		key: "courses",
-		name: "Courses",
-		emoji: "🎓",
-		homes: ["learning"]
-	},
-	{
-		key: "books",
-		name: "Books",
-		emoji: "📚",
-		homes: ["learning"]
-	},
-	{
-		key: "certifications",
-		name: "Certifications",
-		emoji: "📜",
-		homes: ["learning"]
-	},
-	{
-		key: "stocks",
-		name: "Stocks & funds",
-		emoji: "📈",
-		homes: ["investing"]
-	},
-	{
-		key: "crypto",
-		name: "Crypto",
-		emoji: "🪙",
-		homes: ["investing"]
-	},
-	{
-		key: "bankfees",
-		name: "Bank fees",
-		emoji: "🏦",
-		homes: ["bills"]
-	},
-	{
-		key: "taxes",
-		name: "Taxes",
-		emoji: "🧾",
-		homes: ["bills"]
-	}
-];
-var PARENT_IDS = {
-	food: "food",
-	transport: "transport",
-	home: "home",
-	hygiene: "beauty",
-	health: "health",
-	clothes: "shopping",
-	shopping: "shopping",
-	gifts: "gifts",
-	"family-out": "family",
-	fun: "fun",
-	learning: "learning",
-	subscriptions: "subscriptions",
-	sport: "sport",
-	investing: "investing",
-	tech: "tech",
-	bills: "bills",
-	other: "other"
-};
-var PARENT_NAMES = [
-	["food", /food|grocer|eat|mancare|продукт|еда/],
-	["transport", /transport|car\b|auto|masina|travel to|транспорт/],
-	["home", /home|house|rent|casa|locuin|chirie|дом|кварт/],
-	["tech", /tech|gadget|electron|computer|laptop|техник|гаджет/],
-	["beauty", /beauty|cosmet|hygien|igien|frumus|красот|космет|гигиен/],
-	["health", /health|medic|sanat|pharm|здоров|медиц/],
-	["shopping", /shop|cloth|haine|fashion|одежд|покупк/],
-	["gifts", /gift|cadou|подар/],
-	["family", /family|famil|parent|kids|copii|семь|дет/],
-	["fun", /fun|going out|entertain|leisure|distract|развлеч|досуг/],
-	["learning", /learn|study|course|educ|school|invat|учеб|образов/],
-	["subscriptions", /subscri|abonam|подпис/],
-	["sport", /sport|gym|fitness|спорт/],
-	["investing", /invest|инвест/],
-	["bills", /bill|fee|tax|bank|impozit|comision|налог|комисс/]
-];
-function parentKeyOf(c) {
-	if (!c || c.type !== "expense") return null;
-	if (PARENT_IDS[c.id]) return PARENT_IDS[c.id];
-	const n = fold$5(c.name);
-	return PARENT_NAMES.find(([, re]) => re.test(n))?.[0] || null;
-}
-var ADD_IF_MISSING = {
-	tech: {
-		id: "tech",
-		name: "Tech",
-		emoji: "💻",
-		jar: "growth"
-	},
-	bills: {
-		id: "bills",
-		name: "Bills & fees",
-		emoji: "🧾",
-		jar: "living"
-	}
-};
-function ensureTree(settings) {
-	if (Array.isArray(settings.subcats)) {
-		if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
-		return false;
-	}
-	settings.categories = [...settings.categories || []];
-	const jars = settings.jars || [];
-	const home = {};
-	for (const c of settings.categories) {
-		if (c.archived) continue;
-		const k = parentKeyOf(c);
-		if (k && !home[k]) home[k] = c.id;
-	}
-	for (const [k, def] of Object.entries(ADD_IF_MISSING)) {
-		if (home[k] || settings.categories.some((c) => c.id === def.id)) continue;
-		const jar = jars.some((j) => j.id === def.jar) ? def.jar : jars.find((j) => !j.savings)?.id;
-		settings.categories.push({
-			id: def.id,
-			type: "expense",
-			name: def.name,
-			emoji: def.emoji,
-			...jar ? { jar } : {},
-			jarChosen: true,
-			updatedAt: 0
-		});
-		home[k] = def.id;
-	}
-	settings.subcats = [];
-	for (const d of SUB_DEFAULTS) {
-		const h = d.homes.find((x) => home[x]);
-		if (!h) continue;
-		settings.subcats.push({
-			id: `s-${d.key}`,
-			parent: home[h],
-			key: d.key,
-			name: d.name,
-			emoji: d.emoji,
-			updatedAt: 0
-		});
-	}
-	if (!settings.subMemory || typeof settings.subMemory !== "object") settings.subMemory = {};
-	return true;
-}
-var subList = (state) => Array.isArray(state.settings.subcats) ? state.settings.subcats : [];
-var subById = (state, id) => id ? subList(state).find((s) => s.id === id) || null : null;
-var subsOf = (state, catId) => subList(state).filter((s) => s.parent === catId && !s.archived);
-function subOf(state, t) {
-	const s = t && t.sub ? subById(state, t.sub) : null;
-	return s && s.parent === t.category ? s : null;
-}
-var isOther$1 = (catId) => !catId || catId === "other" || catId === "other-in";
-var touch = (o, now) => Object.assign(o, { updatedAt: now });
-function setSub(state, t, id, { learn = true, now = Date.now() } = {}) {
-	const s = subById(state, id);
-	if (!s) return false;
-	t.sub = s.id;
-	t.category = s.parent;
-	touch(t, now);
-	if (learn) rememberSub(state, t.note, s.id, now);
-	return true;
-}
-var STOP$4 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store at in on of la de si cu pe some a an my lei mdl usd eur today yesterday azi ieri".split(" "));
-var noteWords = (note) => (fold$5(String(note || "").replace(/#[\p{L}\p{N}_-]+/gu, " ")).match(/[\p{L}]{2,}/gu) || []).filter((w) => !STOP$4.has(w));
-function merchantKey(note) {
-	return [...new Set(noteWords(note))].slice(0, 3).join(" ");
-}
-var MEMORY_MAX = 600;
-function rememberSub(state, note, id, now = Date.now()) {
-	const k = merchantKey(note);
-	if (!k || !subById(state, id)) return false;
-	const mem = { ...state.settings.subMemory || {} };
-	delete mem[k];
-	mem[k] = id;
-	const keys = Object.keys(mem);
-	for (const old of keys.slice(0, Math.max(0, keys.length - MEMORY_MAX))) delete mem[old];
-	state.settings.subMemory = mem;
-	state.settings.updatedAt = now;
-	return true;
-}
-function memorySub(state, note) {
-	const mem = state.settings.subMemory || {};
-	const k = merchantKey(note);
-	if (!k) return null;
-	if (mem[k] && subById(state, mem[k])) return subById(state, mem[k]);
-	const have = new Set(noteWords(note));
-	let best = null;
-	for (const [key, id] of Object.entries(mem)) {
-		const ws = key.split(" ");
-		if (!ws.every((w) => have.has(w))) continue;
-		const s = subById(state, id);
-		if (s && (!best || ws.length > best.n)) best = {
-			s,
-			n: ws.length
-		};
-	}
-	return best?.s || null;
-}
-var KEYWORDS$1 = [
-	["delivery", "glovo, wolt, straus, bolt food, yandex eda, livrare, deliver, доставк"],
-	["bankfees", "comision, commission, комисси, bank fee, card fee, deservire, обслуживание счета, maintenance fee, taxa card"],
-	["taxes", "tax$, taxes$, taxa$, impozit, налог, fisc, amenda, штраф, fine$"],
-	["software", "chatgpt, openai, claude, anthropic, cursor, copilot, github, midjourney, notion, figma, adobe, jetbrains, software, licen, gpt$, ai subscription"],
-	["streaming", "netflix, spotify, youtube premium, apple music, hbo, disney, deezer, okko, кинопоиск, yandex plus, music app"],
-	["apps", "icloud, google one, google storage, dropbox, cloud$, app store, google play"],
-	["games", "steam$, playstation, xbox, nintendo, epic games, game$, games$, joc$, jocuri, игр"],
-	["gadgets", "gadget, laptop, headphone, casti, charger, incarcator, mouse$, keyboard, monitor, usb$, cable, cablu, наушник, ноутбук, зарядк, smartphone, iphone, samsung, xiaomi, airpods, tablet, phone case, darwin, enter$"],
-	["taxi", "taxi, такси, yandex$, bolt$, uber$, itaxi"],
-	["fuel", "fuel, petrol, benzin, motorin, diesel, бензин, топлив, lukoil, rompetrol, petrom, tirex, gas station, азс$"],
-	["public", "bus$, autobuz, troleibuz, microbuz, metro$, tram$, train$, tren$, автобус, троллейбус, маршрутк, трамва, поезд, метро"],
-	["car", "car repair, service auto, mecanic, vulcaniz, шиномонтаж, автосервис, car wash, spalatorie, parking, parcare, парковк"],
-	["rent", "rent$, chirie, аренд, квартплат"],
-	["utilities", "electric, lumina, gaz$, apa$, water bill, utilit, comunal, коммун, свет$, газ$, вода$, termoelectrica, premier energy, heating, incalzire"],
-	["internet", "internet, telefon, phone bill, orange$, moldcell, starnet, unite$, mobile top, интернет, связь, телефон"],
-	["furniture", "furniture, mobila, sofa$, ikea, jysk, мебел, desk$, chair, scaun, canapea"],
-	["cleaning", "cleaning, curatenie, detergent, уборк, моющ, bleach, burete, clor$"],
-	["haircut", "haircut, hair$, frizer, tuns$, barber, стрижк, парикмах, nails$, manichiur, маникюр"],
-	["cosmetics", "cosmetic, makeup, machiaj, lipstick, ruj$, perfume, parfum, косметик, духи, помад, mascara, rimel"],
-	["skincare", "skincare, cream, crema, крем, serum, lotion, shampoo, sampon, soap$, sapun, шампун, мыло, toothpaste, pasta de dinti, deodorant, hygiene, igien, гигиен, уход"],
-	["pharmacy", "pharm, farmac, аптек, vitamin, medicament, лекарств, pills, pastile, таблетк"],
-	["doctor", "doctor, medic$, dentist, stomatolog, clinic, analize, hospital, spital, врач, клиник, стоматолог, анализ"],
-	["gym", "gym$, fitness, фитнес, спортзал, sala de forta, yoga, йога"],
-	["competitions", "competi, turneu, tournament, соревнов, турнир"],
-	["gear", "kimono, echipament, экипиров, sports gear, sport gear"],
-	["groceries", "grocer, supermarket, market$, lidl, kaufland, linella, fidesco, nr1$, green hills, produse, alimente, продукт, супермаркет, fruit, fructe, legume, vegetables, овощ, фрукт, bread, paine, хлеб, milk$, lapte, молок"],
-	["restaurants", "restaurant, kebab, shaorma, shawarma, шаурм, pizza, burger, sushi, lunch, dinner, pranz, cina$, ресторан, обед, ужин, mcdonald, kfc$, andy$, bistro, grill"],
-	["cafes", "coffee, cafe$, cafea, кофе, кафе, latte, cappuccino, espresso, starbucks, tea$, ceai, чай$, cofetarie"],
-	["snacks", "snack, chips, chocolate, ciocolat, шоколад, juice, suc$, сок$, ice cream, inghetata, мороженое, bakery, patiserie, covrig, sweets, dulciuri, конфет"],
-	["gifts", "gift, cadou, подар, present$, flowers, flori, цвет"],
-	["celebrations", "birthday, zi de nastere, aniversar, wedding, nunta, cumatrie, день рождения, свадьб, christmas, craciun, new year, revelion"],
-	["support", "mama$, mom$, mother, tata$, dad$, father, brother, frate, sister, sora$, parents, parinti, мама, папа, брат, сестр, родител, family, familie"],
-	["goingout", "bar$, club$, pub$, party, petrecere, drinks, beer, bere$, cocktail, бар$, клуб, пиво"],
-	["cinema", "cinema, movie, film$, кино$, cineplex"],
-	["events", "concert, ticket, bilet, theatre, theater, teatru, festival, show$, концерт, театр, museum, muzeu, музей, bowling, escape room"],
-	["hobbies", "hobby, paint, culori, guitar, chitara, lego$, craft, board game, joc de masa"],
-	["travel", "travel, trip$, hotel, airbnb, flight, avion, zbor$, booking, vacation, vacanta, excursie, путешеств, отель, wizz, ryanair"],
-	["courses", "course, curs$, cursuri, udemy, coursera, training, tutor$, репетитор, курс, school, scoala, universit, lesson, lectie"],
-	["books", "book$, books$, carte$, carti$, книг, kindle, librarie"],
-	["certifications", "certif, exam$, examen, экзамен, сертиф, ielts, toefl"],
-	["shoes", "shoe, pantofi, sneaker, adidasi, ghete, обув, кроссовк, boots, cizme"],
-	["accessories", "bag$, geanta, watch$, ceas$, belt$, curea, sunglasses, ochelari, jewel, bijuter, сумк, часы, рюкзак, backpack, rucsac"],
-	["clothes", "cloth, haine, shirt, tricou, jeans, blugi, jacket, geaca, dress$, rochie, одежд, футболк, куртк, zara$, lcw$, sweater, pulover, hoodie"],
-	["stocks", "stock$, stocks$, actiuni, etf$, broker, акци"],
-	["crypto", "crypto, bitcoin, btc$, binance, крипт, usdt$"]
-].map(([key, text]) => {
-	const items = text.split(",").map((x) => fold$5(x.trim())).filter(Boolean);
-	return {
-		key,
-		phrases: items.filter((x) => x.includes(" ")),
-		exact: items.filter((x) => !x.includes(" ") && x.endsWith("$")).map((x) => x.slice(0, -1)),
-		stems: items.filter((x) => !x.includes(" ") && !x.endsWith("$"))
-	};
-});
-function keywordKeys(note) {
-	const text = ` ${fold$5(note).replace(/[^\p{L}\p{N}]+/gu, " ").trim()} `;
-	const words = text.trim().split(" ").filter(Boolean);
-	const out = [];
-	for (const k of KEYWORDS$1) if (k.phrases.some((p) => text.includes(` ${p} `)) || k.exact.some((x) => words.includes(x)) || k.stems.some((x) => words.some((w) => w.startsWith(x)))) out.push(k.key);
-	return out;
-}
-function nameSub(state, note, ok) {
-	const words = new Set(noteWords(note));
-	return subList(state).filter((s) => !s.key && !s.archived && ok(s)).find((s) => {
-		const n = noteWords(s.name);
-		return n.length && n.every((w) => w.length >= 3 && words.has(w));
-	}) || null;
-}
-var pastCache = /* @__PURE__ */ new WeakMap();
-function pastIndex(state) {
-	let last = 0;
-	let filed = 0;
-	for (const t of state.tx) {
-		if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
-		if (t.sub) filed++;
-	}
-	const key = `${state.tx.length}|${last}|${filed}|${subList(state).length}`;
-	const hit = pastCache.get(state.tx);
-	if (hit && hit.key === key) return hit.map;
-	const map = /* @__PURE__ */ new Map();
-	for (const t of state.tx) {
-		if (t.type !== "expense" || !t.sub) continue;
-		const s = subOf(state, t);
-		if (!s) continue;
-		const k = fold$5(t.note).trim();
-		const prev = map.get(k);
-		if (!prev || (t.updatedAt || 0) > (prev.t.updatedAt || 0)) map.set(k, {
-			t,
-			s
-		});
-	}
-	pastCache.set(state.tx, {
-		key,
-		map
-	});
-	return map;
-}
-function suggestSub(state, note, { category = null } = {}) {
-	if (!String(note || "").trim()) return null;
-	const free = isOther$1(category);
-	const ok = (s) => s && !s.archived && (free || s.parent === category) && state.settings.categories.some((c) => c.id === s.parent && c.type === "expense");
-	const mem = memorySub(state, note);
-	if (ok(mem)) return {
-		sub: mem,
-		source: "memory"
-	};
-	const past = pastIndex(state).get(fold$5(note).trim());
-	if (past && ok(past.s)) return {
-		sub: past.s,
-		source: "past"
-	};
-	const named = nameSub(state, note, ok);
-	if (named) return {
-		sub: named,
-		source: "name"
-	};
-	for (const key of keywordKeys(note)) {
-		const s = subList(state).find((x) => x.key === key && ok(x));
-		if (s) return {
-			sub: s,
-			source: "words"
-		};
-	}
-	return null;
-}
-// src/renderer/public/apps/finance/js/fx.js
-var STABLE = {
-	USDT: 1,
-	USDC: 1,
-	FDUSD: 1,
-	BUSD: 1
-};
-function perUsd(rates, code) {
-	if (code === "USD") return 1;
-	const v = rates?.usd?.[code];
-	return v > 0 ? v : null;
-}
-function convert(cents, from, to, rates) {
-	if (from === to) return cents;
-	const a = perUsd(rates, from);
-	const b = perUsd(rates, to);
-	if (!a || !b) return null;
-	return Math.round(cents / a * b);
-}
-function pairRate(from, to, rates) {
-	if (from === to) return 1;
-	const a = perUsd(rates, from);
-	const b = perUsd(rates, to);
-	return a && b ? b / a : null;
-}
-function rateToBase(state, cur) {
-	const base = state?.settings?.currency || "MDL";
-	if (!cur || cur === base) return 1;
-	const live = pairRate(cur, base, state?.rates);
-	if (live) return Math.round(live * 1e4) / 1e4;
-	let best = null;
-	for (const t of state?.tx || []) {
-		if (!t || t.currency !== cur || !(t.rate > 0) || t.rate === 1 && t.base === t.amount) continue;
-		if (!best || String(t.date) > String(best.date) || t.date === best.date && (t.createdAt || 0) > (best.createdAt || 0)) best = t;
-	}
-	return best ? best.rate : null;
-}
-function coinUsd(rates, asset) {
-	if (STABLE[asset]) return STABLE[asset];
-	const p = rates?.crypto?.[asset];
-	return p > 0 ? p : null;
-}
-function coinValue(qty, asset, to, rates) {
-	const usd = coinUsd(rates, asset);
-	if (usd == null || !Number.isFinite(qty)) return null;
-	return convert(Math.round(qty * usd * 100), "USD", to, rates);
-}
-// src/renderer/public/apps/finance/js/recurring.js
-var UNITS = [
-	{
-		id: "day",
-		one: "day",
-		many: "days"
-	},
-	{
-		id: "week",
-		one: "week",
-		many: "weeks"
-	},
-	{
-		id: "month",
-		one: "month",
-		many: "months"
-	},
-	{
-		id: "year",
-		one: "year",
-		many: "years"
-	}
-];
-var LEGACY = {
-	week: ["week", 1],
-	"2weeks": ["week", 2],
-	month: ["month", 1],
-	"3months": ["month", 3],
-	year: ["year", 1]
-};
-var pad$7 = (n) => String(n).padStart(2, "0");
-var clampN = (n) => Math.max(1, Math.min(999, Math.round(Number(n)) || 1));
-function spec(rule) {
-	if (rule.every === "once") return null;
-	if (rule.every === "custom") {
-		const unit = UNITS.some((u) => u.id === rule.unit) ? rule.unit : "month";
-		const dom = (unit === "month" || unit === "year") && Number.isInteger(rule.dom) && rule.dom >= 1 && rule.dom <= 31 ? rule.dom : null;
-		return {
-			unit,
-			n: clampN(rule.n),
-			dom
-		};
-	}
-	const [unit, n] = LEGACY[rule.every] || ["month", 1];
-	return {
-		unit,
-		n,
-		dom: null
-	};
-}
-function anchor(rule, s) {
-	if (!s.dom || s.unit !== "month" && s.unit !== "year") return rule.start;
-	const key = monthKey(rule.start);
-	const d = `${key}-${pad$7(Math.min(s.dom, daysInMonth$1(key)))}`;
-	return d >= rule.start ? d : `${addMonths(key, 1)}-${pad$7(Math.min(s.dom, daysInMonth$1(addMonths(key, 1))))}`;
-}
-function nth(rule, n) {
-	const s = spec(rule);
-	if (!s) return rule.start;
-	const first = anchor(rule, s);
-	if (s.unit === "day") return addDays$1(first, s.n * n);
-	if (s.unit === "week") return addDays$1(first, 7 * s.n * n);
-	const key = addMonths(monthKey(first), (s.unit === "year" ? 12 : 1) * s.n * n);
-	return `${key}-${pad$7(Math.min(s.dom || Number(first.slice(8, 10)), daysInMonth$1(key)))}`;
-}
-var recId = (rule, date) => `rec-${rule.id}-${date}`;
-function occurrences(rule, from, to, max = 1e3) {
-	const out = [];
-	for (let n = 0; n < 5e3 && out.length < max; n++) {
-		if (rule.every === "once" && n > 0) break;
-		const d = nth(rule, n);
-		if (d > to || rule.end && d > rule.end) break;
-		if (d >= from) out.push(d);
-	}
-	return out;
-}
-var active = (state) => (state.recurring || []).filter((r) => !r.paused);
-var sortItems = (a, b) => a.date.localeCompare(b.date) || (a.rule.note || "").localeCompare(b.rule.note || "");
-function dueItems(state, today) {
-	const out = [];
-	const have = new Set((state.tx || []).map((t) => t.id));
-	for (const rule of active(state)) {
-		const from = rule.lastDone ? addDays$1(rule.lastDone, 1) : rule.start;
-		for (const date of occurrences(rule, from, today, 60)) {
-			if (have.has(recId(rule, date))) continue;
-			out.push({
-				rule,
-				date
-			});
-		}
-	}
-	return out.sort(sortItems);
-}
-function upcomingItems(state, today, days = 30) {
-	const out = [];
-	const to = addDays$1(today, days);
-	for (const rule of active(state)) {
-		const from = addDays$1(rule.lastDone && rule.lastDone > today ? rule.lastDone : today, 1);
-		for (const date of occurrences(rule, from, to, 60)) out.push({
-			rule,
-			date
-		});
-	}
-	return out.sort(sortItems);
-}
-var HALF_LIFE_DAYS = 180;
-var DAY$1 = 864e5;
-var fold$4 = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-var STOP$3 = new Set("plata platii plati pentru from with the and for at to of in on by la de din si cu pe al ale card pos atm srl sa ii ip md mda chisinau chisinaului balti moldova str nr bd bul via transfer payment purchase pay paid achitare cumparare comision operatiune tranzactie tranzactia retragere online web www com net org ltd llc inc gmbh ooo maib micb victoriabank moldindconbank eximbank fincombank energbank paynet mpay revolut visa mastercard оплата покупка перевод платеж для ооо".split(" "));
-var FAMILY = /* @__PURE__ */ new Set([
-	"uber",
-	"bolt",
-	"yandex",
-	"google",
-	"apple",
-	"amazon",
-	"paypal",
-	"steam",
-	"microsoft"
-]);
-function merchantOf(note) {
-	const words = fold$4(note).replace(/#[\p{L}\p{N}_-]+/gu, " ").replace(/[\p{N}]+/gu, " ").replace(/[^\p{L}\s]/gu, " ").split(/\s+/).filter((w) => w.length >= 2 && !STOP$3.has(w));
-	if (!words.length) return "";
-	return FAMILY.has(words[0]) && words[1] ? `${words[0]} ${words[1]}` : words[0];
-}
-var isOther = (id) => id === "other" || id === "other-in";
-var validCat = (state, id, type) => (state.settings?.categories || []).some((c) => c.id === id && c.type === type && !c.archived);
-/** A record that counts as your own choice (not a guess, not unconfirmed). */
-function isEvidence(t) {
-	if (!t || t.type !== "expense" && t.type !== "income" || t.loan || t.reconcile) return false;
-	if (!t.category || isOther(t.category) || t.catBy === "auto") return false;
-	if ((t.source === "capture" || t.source === "auto") && !t.confirmedAt) return false;
-	return true;
-}
-var cache$1 = /* @__PURE__ */ new WeakMap();
-function choiceTable(state, now = Date.now()) {
-	const tx = state.tx || [];
-	let last = 0;
-	for (const t of tx) if ((t.updatedAt || 0) > last) last = t.updatedAt || 0;
-	const key = `${tx.length}|${last}|${Math.floor(now / DAY$1)}`;
-	const hit = cache$1.get(tx);
-	if (hit && hit.key === key) return hit.table;
-	const table = /* @__PURE__ */ new Map();
-	for (const t of tx) {
-		if (!isEvidence(t)) continue;
-		const m = merchantOf(t.note);
-		if (!m) continue;
-		const k = `${t.type}|${m}`;
-		let row = table.get(k);
-		if (!row) table.set(k, row = {
-			merchant: m,
-			type: t.type,
-			cats: /* @__PURE__ */ new Map(),
-			subs: /* @__PURE__ */ new Map(),
-			books: /* @__PURE__ */ new Map(),
-			n: 0,
-			last: "",
-			label: t.note
-		});
-		const at = Date.parse(`${t.date}T12:00:00Z`);
-		const w = Number.isFinite(at) ? Math.pow(.5, Math.max(0, now - at) / (HALF_LIFE_DAYS * DAY$1)) : 1;
-		row.cats.set(t.category, (row.cats.get(t.category) || 0) + w);
-		if (t.sub) row.subs.set(`${t.category}|${t.sub}`, (row.subs.get(`${t.category}|${t.sub}`) || 0) + w);
-		const book = t.book ?? "personal";
-		row.books.set(book, (row.books.get(book) || 0) + w);
-		row.n++;
-		if (String(t.date) >= row.last) {
-			row.last = String(t.date);
-			row.label = t.note;
-		}
-	}
-	cache$1.set(tx, {
-		key,
-		table
-	});
-	return table;
-}
-var top = (map) => [...map.entries()].sort((a, b) => b[1] - a[1]);
-var sum = (map) => [...map.values()].reduce((a, b) => a + b, 0);
-var levelOf = (confidence, n) => confidence >= .9 && n >= 3 ? "sure" : confidence >= .6 ? "maybe" : "guess";
-/** An explicit rule ("contains linella -> Food") for a note: the longest match wins. */
-function ruleFor(state, note, type) {
-	const n = fold$4(note);
-	if (!n) return null;
-	return (state.settings?.rules || []).filter((r) => r && r.match && (r.type === type || r.type === "any") && n.includes(fold$4(r.match)) && validCat(state, r.category, type)).sort((a, b) => b.match.length - a.match.length)[0] || null;
-}
-/** What your records say about this merchant (no rules, no keywords), or null. */
-function merchantChoice(state, note, type, now = Date.now()) {
-	const m = merchantOf(note);
-	if (!m) return null;
-	const row = choiceTable(state, now).get(`${type}|${m}`);
-	if (!row) return null;
-	const cats = top(row.cats).filter(([id]) => validCat(state, id, type));
-	if (!cats.length) return null;
-	const total = sum(row.cats);
-	const confidence = Math.round(cats[0][1] / total * 100) / 100;
-	const subs = top(row.subs).filter(([k]) => k.startsWith(`${cats[0][0]}|`));
-	const books = top(row.books);
-	const book = books.length && books[0][1] / sum(row.books) >= .9 ? books[0][0] : null;
-	return {
-		merchant: m,
-		category: cats[0][0],
-		sub: subs.length && subs[0][1] / cats[0][1] >= .6 ? subs[0][0].split("|")[1] : null,
-		book,
-		confidence,
-		n: row.n,
-		level: levelOf(confidence, row.n),
-		alternatives: cats.map(([id, w]) => ({
-			category: id,
-			confidence: Math.round(w / total * 100) / 100
-		}))
-	};
-}
-function usual(state, type, now) {
-	const from = (/* @__PURE__ */ new Date(now - 90 * DAY$1)).toISOString().slice(0, 10);
-	const n = /* @__PURE__ */ new Map();
-	for (const t of state.tx || []) if (t.type === type && !isOther(t.category) && String(t.date) >= from) n.set(t.category, (n.get(t.category) || 0) + 1);
-	return top(n).map(([id]) => id);
-}
-/**
-* The suggestion for a note: category, subcategory, book, how sure, why, and
-* up to 3 chips (`alternatives`). `guess` is Finance's own keyword guess
-* (model.js suggestCategory), used after rules and your records.
-*/
-function suggest(state, { note, type = "expense" }, { guess = null, now = Date.now(), chips = 3 } = {}) {
-	const m = merchantOf(note);
-	const rule = ruleFor(state, note, type);
-	const mine = merchantChoice(state, note, type, now);
-	let out;
-	if (rule) out = {
-		category: rule.category,
-		sub: rule.sub || null,
-		book: rule.book || mine?.book || null,
-		confidence: 1,
-		level: "sure",
-		why: "rule",
-		rule: rule.id,
-		n: mine?.n || 0
-	};
-	else if (mine) out = {
-		category: mine.category,
-		sub: mine.sub,
-		book: mine.book,
-		confidence: mine.confidence,
-		level: mine.level,
-		why: "merchant",
-		n: mine.n
-	};
-	else if (guess && validCat(state, guess, type) && !isOther(guess)) out = {
-		category: guess,
-		sub: null,
-		book: null,
-		confidence: .3,
-		level: "guess",
-		why: "keyword",
-		n: 0
-	};
-	else out = {
-		category: null,
-		sub: null,
-		book: null,
-		confidence: 0,
-		level: "guess",
-		why: "none",
-		n: 0
-	};
-	const list = [
-		out.category,
-		...(mine?.alternatives || []).map((a) => a.category),
-		guess,
-		...usual(state, type, now),
-		...(state.settings?.categories || []).filter((c) => c.type === type).map((c) => c.id)
-	];
-	const seen = /* @__PURE__ */ new Set();
-	out.alternatives = list.filter((id) => id && !isOther(id) && validCat(state, id, type) && !seen.has(id) && seen.add(id)).slice(0, chips);
-	out.merchant = m;
-	return out;
-}
-// src/renderer/public/apps/finance/js/archive.js
-function applyTx(bal, t) {
-	if (t.type === "income") bal[t.account] = (bal[t.account] || 0) + t.amount;
-	else if (t.type === "expense") bal[t.account] = (bal[t.account] || 0) - t.amount;
-	else if (t.type === "transfer") {
-		bal[t.from] = (bal[t.from] || 0) - t.amount;
-		bal[t.to] = (bal[t.to] || 0) + (Number.isInteger(t.toAmount) ? t.toAmount : t.amount);
-	}
-}
-function archivedTx(state) {
-	const years = state?.settings?.archive?.years;
-	if (!years) return [];
-	return Object.keys(years).sort().flatMap((y) => years[y] || []);
-}
-function archivedBalanceUpTo(state, upTo, bal) {
-	const a = state.settings.archive;
-	if (!a?.cutoff) return;
-	if (!upTo || upTo >= a.cutoff) {
-		for (const [id, v] of Object.entries(a.opening || {})) if (id in bal) bal[id] += v;
-		return;
-	}
-	for (const t of archivedTx(state)) {
-		if (t.date > upTo) continue;
-		const tmp = {};
-		applyTx(tmp, t);
-		for (const [id, v] of Object.entries(tmp)) if (id in bal) bal[id] += v;
-	}
-}
-var cache = /* @__PURE__ */ new WeakMap();
-function withArchive(state) {
-	if (!state?.settings?.archive?.cutoff) return state;
-	const a = state.settings.archive;
-	const hit = cache.get(state.tx);
-	if (hit && hit.a === a && hit.base === state.settings) return hit.out;
-	const { archive: _gone, ...rest } = state.settings;
-	const out = {
-		...state,
-		tx: [...archivedTx(state), ...state.tx],
-		settings: rest
-	};
-	cache.set(state.tx, {
-		a,
-		base: state.settings,
-		out
-	});
-	return out;
-}
-function forRange(state, from) {
-	const c = state?.settings?.archive?.cutoff;
-	return c && from < c ? withArchive(state) : state;
-}
-var ACCOUNT_DEFAULTS = {
-	bank: "",
-	kind: "cash",
-	currency: "MDL",
-	start: 0,
-	last4: "",
-	color: 1,
-	savings: false,
-	archived: false,
-	holdings: []
-};
-function defaultState() {
-	const st = baseState();
-	ensureTree(st.settings);
-	return st;
-}
-function baseState() {
-	return {
-		version: 3,
-		settings: {
-			currency: "MDL",
-			jars: [
-				{
-					id: "savings",
-					name: "Deposit (safe)",
-					emoji: "🏦",
-					pct: 70,
-					savings: true
-				},
-				{
-					id: "living",
-					name: "Food & transport",
-					emoji: "🍔",
-					pct: 10
-				},
-				{
-					id: "growth",
-					name: "Investing & self-development",
-					emoji: "📈",
-					pct: 10
-				},
-				{
-					id: "care",
-					name: "Hygiene & cosmetics",
-					emoji: "🧴",
-					pct: 10
-				}
-			],
-			accounts: [
-				{
-					...ACCOUNT_DEFAULTS,
-					id: "wallet",
-					name: "Wallet",
-					kind: "cash",
-					emoji: "💵",
-					color: 2
-				},
-				{
-					...ACCOUNT_DEFAULTS,
-					id: "safe",
-					name: "Safe",
-					kind: "savings",
-					savings: true,
-					emoji: "🏦",
-					color: 1
-				},
-				{
-					...ACCOUNT_DEFAULTS,
-					id: "card",
-					name: "Card",
-					kind: "card",
-					emoji: "💳",
-					color: 5
-				}
-			],
-			categories: [
-				{
-					id: "work",
-					type: "income",
-					name: "Work",
-					emoji: "💼"
-				},
-				{
-					id: "family",
-					type: "income",
-					name: "Family",
-					emoji: "👪"
-				},
-				{
-					id: "side",
-					type: "income",
-					name: "Side jobs",
-					emoji: "🛠️"
-				},
-				{
-					id: "competitions",
-					type: "income",
-					name: "Competitions",
-					emoji: "🏆"
-				},
-				{
-					id: "gift-in",
-					type: "income",
-					name: "Gifts received",
-					emoji: "🎁"
-				},
-				{
-					id: "other-in",
-					type: "income",
-					name: "Other income",
-					emoji: "➕"
-				},
-				{
-					id: "food",
-					type: "expense",
-					name: "Food",
-					emoji: "🍔",
-					jar: "living"
-				},
-				{
-					id: "transport",
-					type: "expense",
-					name: "Transport",
-					emoji: "🚌",
-					jar: "living"
-				},
-				{
-					id: "home",
-					type: "expense",
-					name: "Home & bills",
-					emoji: "🏠",
-					jar: "living"
-				},
-				{
-					id: "family-out",
-					type: "expense",
-					name: "Family",
-					emoji: "💞",
-					jar: "living"
-				},
-				{
-					id: "gifts",
-					type: "expense",
-					name: "Gifts",
-					emoji: "🎁",
-					jar: "living"
-				},
-				{
-					id: "fun",
-					type: "expense",
-					name: "Fun & going out",
-					emoji: "🎉",
-					jar: "living"
-				},
-				{
-					id: "learning",
-					type: "expense",
-					name: "Learning & tools",
-					emoji: "📚",
-					jar: "growth"
-				},
-				{
-					id: "sport",
-					type: "expense",
-					name: "Sport & competitions",
-					emoji: "🥋",
-					jar: "growth"
-				},
-				{
-					id: "subscriptions",
-					type: "expense",
-					name: "Subscriptions",
-					emoji: "📱",
-					jar: "growth"
-				},
-				{
-					id: "investing",
-					type: "expense",
-					name: "Investing",
-					emoji: "📈",
-					jar: "growth"
-				},
-				{
-					id: "hygiene",
-					type: "expense",
-					name: "Hygiene & cosmetics",
-					emoji: "🧴",
-					jar: "care"
-				},
-				{
-					id: "health",
-					type: "expense",
-					name: "Health",
-					emoji: "💊",
-					jar: "care"
-				},
-				{
-					id: "clothes",
-					type: "expense",
-					name: "Clothes",
-					emoji: "👕",
-					jar: "care"
-				},
-				{
-					id: "other",
-					type: "expense",
-					name: "Other",
-					emoji: "📦",
-					jar: "living"
-				}
-			],
-			goal: {
-				name: "Safe goal",
-				target: 1e7,
-				account: "savings"
-			},
-			savingsAccount: "safe",
-			theme: "dark",
-			themeMotion: false,
-			sound: false,
-			smallPurchase: 1e4
-		},
-		tx: [],
-		people: [],
-		recurring: [],
-		invoices: [],
-		goals: [{
-			id: "g-main",
-			name: "Safe goal",
-			emoji: "🏦",
-			target: 1e7,
-			account: "savings",
-			saved: 0,
-			history: [],
-			deadline: null,
-			doneAt: null,
-			theme: "gold",
-			updatedAt: 0
-		}],
-		goalAllocations: [],
-		reconciliations: [],
-		netWorth: [],
-		deleted: {},
-		rates: null,
-		meta: {
-			lastBackup: null,
-			createdAt: null
-		}
-	};
-}
-function normalizeState(raw) {
-	const base = defaultState();
-	if (!raw || typeof raw !== "object") return base;
-	const s = raw.settings || {};
-	const accounts = (Array.isArray(s.accounts) && s.accounts.length ? s.accounts : base.settings.accounts).map((a, i) => {
-		const acc = {
-			...ACCOUNT_DEFAULTS,
-			color: i % 8 + 1,
-			...a,
-			holdings: Array.isArray(a.holdings) ? a.holdings : []
-		};
-		if (acc.id === "wallet" || /^(wallet|cash|numerar)$/i.test(acc.name || "")) {
-			if (acc.kind !== "cash") acc.kind = "cash";
-			if (!acc.emoji || acc.emoji === "💳") acc.emoji = "💵";
-		}
-		return acc;
-	});
-	if (!accounts.some((a) => a.kind === "cash" || a.id === "wallet" || /^(wallet|cash|numerar)$/i.test(a.name || ""))) accounts.unshift({
-		...ACCOUNT_DEFAULTS,
-		id: "wallet",
-		name: "Cash",
-		kind: "cash",
-		emoji: "💵",
-		color: 2
-	});
-	const settings = {
-		...base.settings,
-		...s,
-		goal: {
-			...base.settings.goal,
-			...s.goal || {}
-		},
-		jars: Array.isArray(s.jars) && s.jars.length ? s.jars : base.settings.jars,
-		accounts,
-		categories: Array.isArray(s.categories) && s.categories.length ? s.categories : base.settings.categories
-	};
-	if (Array.isArray(s.subcats)) settings.subcats = s.subcats.filter((x) => x && typeof x.id === "string" && typeof x.parent === "string" && x.name);
-	else if (Array.isArray(s.categories) && s.categories.length) delete settings.subcats;
-	if (s.subMemory && typeof s.subMemory === "object") settings.subMemory = { ...s.subMemory };
-	ensureTree(settings);
-	const baseCur = settings.currency || "MDL";
-	const accCur = Object.fromEntries(accounts.map((a) => [a.id, a.currency || baseCur]));
-	const tx = (Array.isArray(raw.tx) ? raw.tx : []).filter(validTx).map((t) => {
-		const currency = t.currency || accCur[t.account ?? t.from] || baseCur;
-		const out = {
-			...t,
-			currency,
-			updatedAt: t.updatedAt || t.createdAt || 0
-		};
-		if (!Number.isInteger(out.base)) {
-			out.base = currency === baseCur ? t.amount : Math.round(t.amount * (t.rate || 1));
-			out.rate = currency === baseCur ? 1 : t.rate || null;
-		}
-		return out;
-	});
-	const people = (Array.isArray(raw.people) ? raw.people : []).filter((p) => p && typeof p.id === "string" && p.name).map((p) => ({
-		note: "",
-		...p,
-		updatedAt: p.updatedAt || 0
-	}));
-	const deleted = raw.deleted && typeof raw.deleted === "object" ? { ...raw.deleted } : {};
-	return {
-		version: 3,
-		settings,
-		tx,
-		people,
-		recurring: (Array.isArray(raw.recurring) ? raw.recurring : []).filter((r) => r && typeof r.id === "string" && Number.isInteger(r.amount) && /^\d{4}-\d{2}-\d{2}$/.test(r.start || "")).map((r) => ({
-			every: "month",
-			currency: accCur[r.account] || baseCur,
-			note: "",
-			auto: false,
-			paused: false,
-			lastDone: null,
-			...r,
-			updatedAt: r.updatedAt || 0
-		})),
-		invoices: (Array.isArray(raw.invoices) ? raw.invoices : []).filter((i) => i && typeof i.id === "string" && /^\d{4}-\d{2}-\d{2}$/.test(i.date || "")).map((i) => ({
-			items: [],
-			note: "",
-			sent: false,
-			paidDate: null,
-			paidTx: null,
-			currency: "USD",
-			...i,
-			updatedAt: i.updatedAt || 0
-		})),
-		netWorth: (Array.isArray(raw.netWorth) ? raw.netWorth : []).filter((x) => x && /^\d{4}-\d{2}-\d{2}$/.test(x.date || "") && Number.isFinite(x.total)),
-		goals: Array.isArray(raw.goals) ? raw.goals.filter((g) => g && typeof g.id === "string" && g.name).map((g) => ({
-			emoji: "🎯",
-			account: "all",
-			saved: 0,
-			history: [],
-			deadline: null,
-			doneAt: null,
-			...g,
-			updatedAt: g.updatedAt || 0
-		})).map((g) => g.id === "g-main" && !g.updatedAt && g.account === "all" && g.name === "Safe goal" ? {
-			...g,
-			account: "savings"
-		} : g) : [{
-			id: "g-main",
-			name: settings.goal.name || "Safe goal",
-			emoji: "🏦",
-			target: settings.goal.target || 0,
-			account: settings.goal.account || "all",
-			saved: 0,
-			history: [],
-			deadline: null,
-			doneAt: null,
-			theme: "gold",
-			updatedAt: 0
-		}],
-		goalAllocations: (Array.isArray(raw.goalAllocations) ? raw.goalAllocations : []).filter((a) => a && typeof a.id === "string" && typeof a.goalId === "string" && Number.isSafeInteger(a.amount) && a.amount > 0 && isValidISO(a.date || "")).map((a) => ({
-			...a,
-			currency: a.currency || baseCur,
-			updatedAt: a.updatedAt || 0
-		})),
-		reconciliations: (Array.isArray(raw.reconciliations) ? raw.reconciliations : []).filter((r) => r && typeof r.id === "string" && typeof r.account === "string" && isValidISO(r.date || "") && Number.isSafeInteger(r.real)).map((r) => ({
-			adjustment: null,
-			...r,
-			updatedAt: r.updatedAt || 0
-		})),
-		deleted,
-		rates: raw.rates || (raw.lastRates?.usd?.MDL ? {
-			usd: { ...raw.lastRates.usd },
-			crypto: {},
-			history: {},
-			fetchedAt: Date.parse(`${raw.lastRates.date}T12:00:00`) || null,
-			synced: true
-		} : null),
-		meta: {
-			...base.meta,
-			...raw.meta || {}
-		}
-	};
-}
-function validTx(t) {
-	return t && typeof t.id === "string" && [
-		"income",
-		"expense",
-		"transfer"
-	].includes(t.type) && Number.isInteger(t.amount) && t.amount > 0 && /^\d{4}-\d{2}-\d{2}$/.test(t.date);
-}
-var B$2 = (t) => Number.isInteger(t.base) ? t.base : t.amount;
-var counts = (t) => !t.loan && !isPointsReward(t) && !isCorrection(t) && !isNotCounted(t);
-function sortTx(list) {
-	return [...list].sort((a, b) => a.date === b.date ? (b.createdAt || 0) - (a.createdAt || 0) : a.date < b.date ? 1 : -1);
-}
-var category = (state, id) => state.settings.categories.find((c) => c.id === id);
-var account = (state, id) => state.settings.accounts.find((a) => a.id === id);
-function knownRates(state) {
-	const r = state.rates || null;
-	const baseCur = state.settings.currency || "MDL";
-	const need = new Set([baseCur, ...state.settings.accounts.map((a) => a.currency)].filter((c) => c && c !== "USD"));
-	const usd = { ...r?.usd || {} };
-	const missing = () => [...need].filter((c) => !(usd[c] > 0));
-	if (!missing().length) return r;
-	const hist = r?.history || {};
-	for (const d of Object.keys(hist).sort().reverse()) {
-		for (const c of missing()) if (hist[d][c] > 0) usd[c] = hist[d][c];
-		if (!missing().length) break;
-	}
-	if (missing().length) {
-		const perBase = {};
-		for (const t of sortTx(state.tx)) if (t.currency && t.currency !== baseCur && t.rate > 0 && !perBase[t.currency]) perBase[t.currency] = t.rate;
-		const basePerUsd = usd[baseCur] > 0 ? usd[baseCur] : perBase.USD;
-		if (basePerUsd > 0) {
-			usd[baseCur] = basePerUsd;
-			for (const c of missing()) if (perBase[c] > 0) usd[c] = basePerUsd / perBase[c];
-		}
-	}
-	return {
-		...r || {},
-		usd,
-		crypto: r?.crypto || {}
-	};
-}
-var savingsJar = (state) => state.settings.jars.find((j) => j.savings) || state.settings.jars[0];
-function accountBalances(state, upTo = null) {
-	const bal = Object.fromEntries(state.settings.accounts.map((a) => [a.id, a.start || 0]));
-	archivedBalanceUpTo(state, upTo, bal);
-	for (const t of state.tx) {
-		if (upTo && t.date > upTo) continue;
-		if (t.type === "income" && t.account in bal) bal[t.account] += t.amount;
-		else if (t.type === "expense" && t.account in bal) bal[t.account] -= t.amount;
-		else if (t.type === "transfer") {
-			if (t.from in bal) bal[t.from] -= t.amount;
-			if (t.to in bal) bal[t.to] += Number.isInteger(t.toAmount) ? t.toAmount : t.amount;
-		}
-	}
-	return bal;
-}
-function accountValues(state, upTo = null) {
-	const baseCur = state.settings.currency;
-	const bal = accountBalances(state, upTo);
-	const rates = knownRates(state);
-	return state.settings.accounts.map((a) => {
-		const own = bal[a.id] || 0;
-		let inBase = convert(own, a.currency, baseCur, rates);
-		let coins = 0;
-		let coinsKnown = true;
-		for (const h of a.holdings || []) {
-			const v = coinValue(Number(h.qty), h.asset, baseCur, rates);
-			if (v == null) coinsKnown = false;
-			else coins += v;
-		}
-		if (inBase != null) inBase += coins;
-		return {
-			account: a,
-			own,
-			coins,
-			coinsKnown,
-			inBase
-		};
-	});
-}
-var monthsBetweenKeys = (a, b) => {
-	const [ya, ma] = a.split("-").map(Number);
-	const [yb, mb] = b.split("-").map(Number);
-	return Math.max(0, (yb - ya) * 12 + (mb - ma));
-};
-var txInMonth = (state, key) => state.tx.filter((t) => monthKey(t.date) === key);
-function sumBy(list, keyFn) {
-	const out = /* @__PURE__ */ new Map();
-	for (const t of list) out.set(keyFn(t), (out.get(keyFn(t)) || 0) + signed$1(t, B$2(t)));
-	return [...out.entries()].map(([id, amount]) => ({
-		id,
-		amount
-	})).sort((a, b) => b.amount - a.amount);
-}
-function monthSummary(state, key) {
-	state = forRange(state, `${key}-01`);
-	const records = txInMonth(state, key);
-	const list = expandSplits(records);
-	const incomes = list.filter((t) => t.type === "income" && counts(t) && !isRefund(t));
-	const expenses = list.filter((t) => t.type === "expense" && counts(t));
-	const refunds = list.filter((t) => isRefund(t));
-	const income = incomes.reduce((a, t) => a + B$2(t), 0);
-	const expense = expenses.reduce((a, t) => a + B$2(t), 0) - refunds.reduce((a, t) => a + B$2(t), 0);
-	const net = income - expense;
-	return {
-		key,
-		income,
-		expense,
-		net,
-		savingsRate: income > 0 ? net / income : null,
-		byCategory: sumBy([...expenses, ...refunds], (t) => t.category),
-		bySource: sumBy(incomes, (t) => t.category),
-		count: records.length,
-		expenses,
-		incomes,
-		refunds
-	};
-}
-var WORK_INCOME = /\b(work|job|jobs|client|clients|freelance|salary|salariu|lucru|proiect|project|invoice|factur\w*)\b/i;
-function isWorkIncome(state, catId) {
-	const c = category(state, catId);
-	if (!c || c.type !== "income") return false;
-	if (typeof c.work === "boolean") return c.work;
-	return c.id === "work" || c.id === "side" || WORK_INCOME.test(c.name || "");
-}
-var isWorkCost = (state, catId) => {
-	const c = category(state, catId);
-	return c?.type === "expense" && c.jar === "none";
-};
-var payOn = (state) => {
-	const p = state.settings.pay;
-	return !!(p?.on && p.buffer && p.to && p.amount > 0 && state.settings.accounts.some((a) => a.id === p.buffer));
-};
-function personalMonth(state, key) {
-	const s = monthSummary(state, key);
-	const workIncome = s.incomes.filter((t) => isWorkIncome(state, t.category)).reduce((a, t) => a + B$2(t), 0);
-	const workCosts = [...s.expenses, ...s.refunds].filter((t) => isWorkCost(state, t.category)).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
-	const otherIncome = s.income - workIncome;
-	const pay = payOn(state);
-	const salary = pay ? txInMonth(state, key).filter((t) => t.type === "transfer" && t.salary).reduce((a, t) => a + B$2(t), 0) : 0;
-	const personalIncome = pay ? salary + otherIncome : s.income - workCosts;
-	const personalSpent = s.expense - workCosts;
-	const kept = personalIncome - personalSpent;
-	return {
-		key,
-		workIncome,
-		workCosts,
-		profit: workIncome - workCosts,
-		otherIncome,
-		salary,
-		pay,
-		personalIncome,
-		personalSpent,
-		kept,
-		rate: personalIncome > 0 ? kept / personalIncome : null
-	};
-}
-var BILLISH = /bill|rent|chiri|apart|utilit|factur|comunal|internet|subscript|abonam|insur|asigur|mortgage|ipotec|credit|coммун|аренд|квартир/i;
-var isBillCategory = (state, catId) => {
-	const c = category(state, catId);
-	if (!c) return false;
-	return typeof c.bill === "boolean" ? c.bill : c.id === "home" || c.id === "subscriptions" || BILLISH.test(c.name || "");
-};
-var mainGoal = (state) => (state.goals || []).find((g) => !g.doneAt && !g.archived) || (state.goals || [])[0] || {
-	...state.settings.goal,
-	id: "g-main"
-};
-function goalAllocationSummary(state, asOf = null) {
-	const base = state.settings.currency;
-	const cash = Math.max(0, accountValues(state, asOf).filter((v) => !v.account.archived && v.account.kind !== "crypto").reduce((sum, v) => sum + (v.inBase || 0), 0));
-	const rows = (state.goalAllocations || []).filter((a) => !asOf || a.date <= asOf).sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0) || a.id.localeCompare(b.id));
-	const byGoal = {}, byIncome = {}, effectiveById = {}, unpriced = [];
-	let reserved = 0, requested = 0;
-	for (const a of rows) {
-		const amount = a.currency && a.currency !== base ? convert(a.amount, a.currency, base, state.rates) : a.amount;
-		if (amount == null) unpriced.push(a.id);
-		const validAmount = Number.isSafeInteger(amount) && amount > 0 ? amount : 0;
-		const goal = (state.goals || []).find((g) => g.id === a.goalId);
-		const income = a.incomeId ? state.tx.find((t) => t.id === a.incomeId && countsAsIncome(t) && (!asOf || t.date <= asOf)) : null;
-		const incomeLeft = a.incomeId ? Math.max(0, (income ? B$2(income) : 0) - (byIncome[a.incomeId] || 0)) : Infinity;
-		const funded = goal?.account === "allocated" ? Math.min(validAmount, Math.max(0, cash - reserved), incomeLeft) : 0;
-		requested += validAmount;
-		effectiveById[a.id] = funded;
-		byGoal[a.goalId] = (byGoal[a.goalId] || 0) + funded;
-		if (a.incomeId) byIncome[a.incomeId] = (byIncome[a.incomeId] || 0) + validAmount;
-		reserved += funded;
-	}
-	return {
-		cash,
-		reserved,
-		requested,
-		unallocated: Math.max(0, cash - reserved),
-		unfunded: requested - reserved,
-		byGoal,
-		byIncome,
-		effectiveById,
-		unpriced
-	};
-}
-function goalValueAt(state, iso, goal = mainGoal(state)) {
-	if (goal.account === "allocated") return goalAllocationSummary(state, iso).byGoal[goal.id] || 0;
-	if (goal.account === "manual") return goal.saved || 0;
-	const vals = accountValues(state, iso);
-	const isSaving = (a) => a.savings || a.kind === "savings";
-	return (goal.account === "savings" ? vals.filter((v) => !v.account.archived && isSaving(v.account)) : goal.account && goal.account !== "all" ? vals.filter((v) => v.account.id === goal.account) : vals.filter((v) => !v.account.archived)).reduce((a, v) => a + (v.inBase ?? 0), 0);
-}
-function goalStatus(state, today, goal = mainGoal(state)) {
-	const current = goalValueAt(state, null, goal);
-	const target = goal.target || 0;
-	const thisMonth = monthKey(today);
-	const end = (k) => `${k}-${String(daysInMonth$1(k)).padStart(2, "0")}`;
-	const active = new Set((goal.account === "allocated" ? (state.goalAllocations || []).filter((a) => a.goalId === goal.id) : state.tx).map((t) => monthKey(t.date)));
-	const months = [...active].filter((k) => k < thisMonth).sort().slice(-3);
-	let pace = null;
-	if (goal.account !== "manual") {
-		if (months.length) {
-			const growth = months.map((k) => goalValueAt(state, end(k), goal) - goalValueAt(state, end(addMonths(k, -1)), goal));
-			pace = Math.round(growth.reduce((a, b) => a + b, 0) / months.length);
-		} else if (active.has(thisMonth)) pace = goalValueAt(state, today, goal) - goalValueAt(state, end(addMonths(thisMonth, -1)), goal);
-	} else if (goal.history?.length) {
-		const since = addDays$1(today, -90);
-		const added = goal.history.filter((h) => h.date >= since).reduce((a, h) => a + h.amount, 0);
-		pace = added ? Math.round(added / 3) : null;
-	}
-	const remaining = Math.max(0, target - current);
-	let monthsLeft = null;
-	let eta = null;
-	if (remaining === 0 && target > 0) monthsLeft = 0;
-	else if (pace && pace > 0) {
-		monthsLeft = Math.ceil(remaining / pace);
-		eta = addMonths(thisMonth, monthsLeft);
-	}
-	let perMonth = null;
-	let deadlineMonths = null;
-	if (goal.deadline && remaining > 0) {
-		deadlineMonths = Math.max(1, monthsBetweenKeys(thisMonth, monthKey(goal.deadline)) + (goal.deadline.slice(8) >= "15" ? 1 : 0));
-		perMonth = Math.ceil(remaining / deadlineMonths / 100) * 100;
-	}
-	const ratio = target ? Math.min(1, Math.max(0, current / target)) : 0;
-	const milestone = [
-		100,
-		75,
-		50,
-		25
-	].find((m) => ratio * 100 >= m) || 0;
-	return {
-		target,
-		current,
-		remaining,
-		ratio,
-		pace,
-		monthsLeft,
-		eta,
-		perMonth,
-		deadlineMonths,
-		milestone,
-		onTrack: perMonth == null ? null : pace != null && pace >= perMonth
-	};
-}
-var spentIn = (state, key, catId) => expandSplits(txInMonth(state, key)).filter((t) => (t.type === "expense" && counts(t) || isRefund(t)) && t.category === catId).reduce((a, t) => a + signed$1(t, B$2(t)), 0);
-function budgetAlert(state, t) {
-	return subBudgetAlert(state, t) || categoryBudgetAlert(state, t);
-}
-function subBudgetAlert(state, t) {
-	const s = t.type === "expense" && counts(t) && !t.splits ? subOf(state, t) : null;
-	if (!(s?.budget > 0)) return null;
-	const after = txInMonth(state, monthKey(t.date)).filter((x) => x.type === "expense" && counts(x) && x.sub === s.id && x.category === s.parent).reduce((a, x) => a + B$2(x), 0);
-	const before = after - B$2(t);
-	const fmt = (x) => formatMoney$1(x, state.settings.currency);
-	if (before <= s.budget && after > s.budget) return {
-		level: "over",
-		text: `${s.name} is over budget: ${fmt(after)} of ${fmt(s.budget)} (${fmt(after - s.budget)} over).`
-	};
-	if (before < s.budget * .8 && after >= s.budget * .8) return {
-		level: "near",
-		text: `${s.name}: ${Math.round(after / s.budget * 100)}% of the budget used. ${fmt(s.budget - after)} left this month.`
-	};
-	return null;
-}
-function categoryBudgetAlert(state, t) {
-	const c = category(state, t.category);
-	if (t.type !== "expense" || !counts(t) || t.splits || !(c?.budget > 0)) return null;
-	const after = spentIn(state, monthKey(t.date), c.id);
-	const before = after - B$2(t);
-	const fmt = (x) => formatMoney$1(x, state.settings.currency);
-	if (before <= c.budget && after > c.budget) return {
-		level: "over",
-		text: `${c.name} is over budget: ${fmt(after)} of ${fmt(c.budget)} (${fmt(after - c.budget)} over).`
-	};
-	if (before < c.budget * .8 && after >= c.budget * .8) return {
-		level: "near",
-		text: `${c.name}: ${Math.round(after / c.budget * 100)}% of the budget used. ${fmt(c.budget - after)} left this month.`
-	};
-	return null;
-}
-var KEYWORDS = {
-	expense: [
-		["food", /food|mancare|mâncare|еда|продукт|magazin|market|lidl|kaufland|linella|pizza|burger|cafe|cafea|coffee|lunch|dinner|breakfast/i],
-		["transport", /transport|taxi|yandex|bolt|uber|bus|autobuz|troleibuz|metro|benzin|fuel|petrol|бензин|такси/i],
-		["gifts", /gift|cadou|подар|birthday|zi de nastere/i],
-		["subscriptions", /subscri|abonament|подписк|google|netflix|spotify|youtube|icloud|chatgpt|claude/i],
-		["hygiene", /hair|igien|cosmet|shampoo|sampon|soap|sapun|barber|frizer|uhod|косметик/i],
-		["health", /medic|pharm|farmac|doctor|dentist|аптек|лекар|vitamin/i],
-		["sport", /sport|gym|sala|black belt|centura|karate|judo|competi|turneu|dame|шашк|спорт/i],
-		["learning", /book|carte|course|curs|printer|culori|material|school|scoala|universit|math|matem|teach/i],
-		["clothes", /cloth|haine|shoe|pantofi|adidas|nike|одежд|обув/i],
-		["home", /rent|chirie|electric|gaz|apa|water|internet|telefon|phone|bill|factur|комм/i],
-		["fun", /cinema|film|movie|party|club|bar|game|joc|concert/i],
-		["family", /mother|mama|mom|brother|frate|sister|sora|family|familie|мама|брат/i]
-	],
-	income: [
-		["competitions", /competi|turneu|prize|premiu|dame|tournament|donation from/i],
-		["work", /work|job|salar|lucru|munca|serviciu|services|работ|зарплат|from work/i],
-		["side", /interview|freelance|client|order|comand|tutor|lesson|lectie|repair|sold|vandut/i],
-		["family", /mother|mama|mom|brother|frate|family|familie|father|tata|bunic|мама|папа|семь/i],
-		["gift-in", /gift|cadou|birthday|подар/i]
-	]
-};
-var fold$3 = (s) => String(s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-var STOP$2 = new Set("plata platii pentru from with the and for card pos srl sa ii md mda chisinau chisinaului moldova str nr via transfer payment purchase achitare cumparare comision operatiune tranzactie оплата покупка перевод платеж для www com shop store magazin".split(" "));
-var words = (note) => [...new Set(fold$3(note).match(/[\p{L}]{3,}/gu) || [])].filter((w) => !STOP$2.has(w));
-function matchRule(state, note, type) {
-	const n = fold$3(note);
-	if (!n) return null;
-	return (state.settings.rules || []).filter((r) => r.match && (r.type === type || r.type === "any") && n.includes(fold$3(r.match))).sort((a, b) => b.match.length - a.match.length)[0] || null;
-}
-var statsCache = /* @__PURE__ */ new WeakMap();
-function wordStats(state, type) {
-	let last = 0;
-	for (const t of state.tx) if (t.updatedAt > last) last = t.updatedAt;
-	const key = `${type}|${state.tx.length}|${last}`;
-	const hit = statsCache.get(state.tx);
-	if (hit?.[key]) return hit[key];
-	const out = /* @__PURE__ */ new Map();
-	for (const t of state.tx) {
-		if (t.type !== type || !t.note || t.category === "other" || t.category === "other-in") continue;
-		for (const w of words(t.note)) {
-			const m = out.get(w) || /* @__PURE__ */ new Map();
-			m.set(t.category, (m.get(t.category) || 0) + 1);
-			out.set(w, m);
-		}
-	}
-	statsCache.set(state.tx, {
-		...Object.keys(hit || {}).length < 4 ? hit : {},
-		[key]: out
-	});
-	return out;
-}
-function learnedCategory(state, note, type) {
-	const stats = wordStats(state, type);
-	let best = null;
-	for (const w of words(note)) {
-		const m = stats.get(w);
-		if (!m) continue;
-		const total = [...m.values()].reduce((a, b) => a + b, 0);
-		const [cat, n] = [...m.entries()].sort((a, b) => b[1] - a[1])[0];
-		if (n >= 2 && n / total >= .85 && (!best || n > best.n)) best = {
-			cat,
-			n
-		};
-	}
-	return best?.cat || null;
-}
-function suggestCategory(state, note, type) {
-	const n = (note || "").trim().toLowerCase();
-	if (!n || type === "transfer") return null;
-	const valid = (id) => state.settings.categories.some((c) => c.id === id && c.type === type);
-	const rule = matchRule(state, note, type);
-	if (rule && valid(rule.category)) return rule.category;
-	const sure = merchantChoice(state, note, type);
-	if (sure?.level === "sure" && valid(sure.category)) return sure.category;
-	const past = sortTx(state.tx).find((t) => t.type === type && (t.note || "").trim().toLowerCase() === n);
-	if (past && valid(past.category)) return past.category;
-	const mem = type === "expense" ? memorySub(state, note) : null;
-	if (mem && valid(mem.parent)) return mem.parent;
-	const learned = learnedCategory(state, note, type);
-	if (learned && valid(learned)) return learned;
-	for (const [id, re] of KEYWORDS[type] || []) if (re.test(n) && valid(id)) return id;
-	const sub = type === "expense" ? suggestSub(state, note) : null;
-	if (sub && valid(sub.sub.parent)) return sub.sub.parent;
-	return null;
 }
 // src/renderer/public/apps/finance/js/blocks.js
 var G = (name, list) => ({
@@ -59688,7 +60609,7 @@ function payStatus(state, today) {
 // src/renderer/public/apps/finance/js/forecast.js
 var isLiquid = (a) => !a.archived && !a.savings && a.kind !== "savings" && a.kind !== "crypto";
 function spentFrom(state, today, window = 60) {
-	const since = addDays$1(today, -window + 1);
+	const since = addDays$4(today, -window + 1);
 	const by = /* @__PURE__ */ new Map();
 	let total = 0;
 	for (const t of linesOf(state)) {
@@ -59724,7 +60645,7 @@ function limitStatus(state, today) {
 	const amount = state.settings.limit.amount;
 	const key = monthKey(today);
 	const daysLeft = daysInMonth$1(key) - Number(today.slice(8)) + 1;
-	const before = everydaySpent(state, `${key}-01`, addDays$1(today, -1));
+	const before = everydaySpent(state, `${key}-01`, addDays$4(today, -1));
 	const spentToday = everydaySpent(state, today, today);
 	const leftBefore = amount - before;
 	const perDay = leftBefore > 0 ? lei$2(leftBefore / daysLeft) : 0;
@@ -59827,7 +60748,7 @@ var shortDay = (iso) => `${Number(iso.slice(8))} ${[
 	"Dec"
 ][Number(iso.slice(5, 7)) - 1]}`;
 // src/renderer/public/apps/finance/js/telegram.js
-var formatMoney = (c, cur, o) => formatMoney$1(c, cur, {
+var formatMoney = (c, cur, o) => formatMoney$2(c, cur, {
 	...o,
 	reveal: true
 });
@@ -59902,7 +60823,7 @@ function parseQuick(text, state) {
 function subFor(state, note, category) {
 	return suggestSub(state, note, { category })?.sub || null;
 }
-var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$1(sentDay, -f.daysAgo) : sentDay;
+var recordDay$1 = (sentDay, f) => f?.daysAgo ? addDays$4(sentDay, -f.daysAgo) : sentDay;
 function recordFromMessage(fields, { updateId, date, rate = 1, currency, now = Date.now() }) {
 	return {
 		id: `tg-${updateId}`,
@@ -59948,90 +60869,6 @@ function loggedText(state, t, today = null) {
 	return lines.join("\n");
 }
 var dayShort = (iso) => `${DOW_SHORT[dowIndex(iso)]} ${Number(iso.slice(8))}`;
-// src/renderer/public/apps/finance/js/settingstamp.js
-/** Device-only settings: never travel. */
-var LOCAL_SETTINGS = [
-	"theme",
-	"themeInLife",
-	"themeMotion",
-	"logView"
-];
-/** Settings lists merged item by item (id + updatedAt, deletions in state.deleted). */
-var BY_ID = [
-	"wishlist",
-	"savedViews",
-	"customFields"
-];
-/** "Last done on" days: the later day wins, whoever saved last. */
-var LATER_DAY = ["cashCountLast", "checkupSnooze"];
-/** Keys with their own merge in sync.js. */
-var OWN_MERGE = [
-	"jars",
-	"incomeSources",
-	"accounts",
-	"categories",
-	"subcats",
-	"subMemory",
-	"rules",
-	"archive",
-	"budgets",
-	"checkupLast",
-	"updatedAt",
-	"changedAt"
-];
-[
-	...LOCAL_SETTINGS,
-	...BY_ID,
-	...LATER_DAY,
-	...OWN_MERGE
-];
-// src/renderer/public/apps/finance/js/sync.js
-function toCloud(state, deviceId, now = Date.now()) {
-	const settings = { ...state.settings };
-	for (const k of LOCAL_SETTINGS) delete settings[k];
-	return {
-		app: "finance-helper",
-		schema: 3,
-		savedAt: now,
-		deviceId,
-		data: {
-			settings,
-			tx: state.tx,
-			people: state.people,
-			recurring: state.recurring || [],
-			invoices: state.invoices || [],
-			netWorth: state.netWorth || [],
-			goals: state.goals || [],
-			goalAllocations: state.goalAllocations || [],
-			reconciliations: state.reconciliations || [],
-			deleted: state.deleted,
-			...sharedRates(state.rates) ? { lastRates: sharedRates(state.rates) } : {}
-		}
-	};
-}
-var FIAT_CODES = [
-	"MDL",
-	"USD",
-	"EUR",
-	"RON",
-	"GBP",
-	"UAH",
-	"CHF",
-	"PLN",
-	"TRY",
-	"CAD"
-];
-function sharedRates(rates) {
-	if (!rates?.usd || !rates.fetchedAt) return null;
-	const usd = {};
-	for (const c of FIAT_CODES) if (rates.usd[c] > 0) usd[c] = Math.round(rates.usd[c] * 1e4) / 1e4;
-	if (!usd.MDL) return null;
-	const d = new Date(rates.fetchedAt);
-	return {
-		date: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
-		usd
-	};
-}
 // src/core/moneyText.ts
 /**
 * One way to write money everywhere: Finance Helper's own formatter
@@ -60043,7 +60880,7 @@ function sharedRates(rates) {
 * The currency is the one Finance Helper uses (its settings.currency, MDL by
 * default); the label is always the code (MDL), never "lei".
 */
-var fmt$1 = formatMoney$1;
+var fmt$1 = formatMoney$2;
 /** A total in bani, rounded to whole units: "1 240 MDL". */
 function totalText(bani, currency = "MDL") {
 	return fmt$1(Math.round((Number(bani) || 0) / 100) * 100, currency || "MDL");
@@ -60560,7 +61397,7 @@ function learnCategory(state, tx) {
 		line: "",
 		chips: []
 	};
-	const s = suggest(state, {
+	const s = suggest$1(state, {
 		note: tx.note,
 		type: tx.type
 	}, { guess: tx.category });
@@ -66918,7 +67755,7 @@ function lighterAnswer(text) {
 	return null;
 }
 // src/renderer/src/web/bots/commands.ts
-var store$1 = typeof localStorage !== "undefined" ? localStorage : null;
+var store$1 = hostStore();
 /**
 * Finance Helper's accounts, for /balance (own currency each): this device's
 * copy, else the backup Finance Helper keeps in Turso (the server has no device).
@@ -67137,7 +67974,7 @@ function runCommand(s, parsed, text, env) {
 			const cat = parsed.expenseCategory || "other";
 			const note = parsed.expenseNote || "";
 			if (cat === "income") return {
-				reply: `💰 <b>Income noted:</b> ${formatMoney$2(cents, "MDL")}${note ? ` · ${esc$5(note)}` : ""}\n\nAdded to Finance Helper.`,
+				reply: `💰 <b>Income noted:</b> ${formatMoney$1(cents, "MDL")}${note ? ` · ${esc$5(note)}` : ""}\n\nAdded to Finance Helper.`,
 				expense: {
 					amount: cents,
 					category: "income",
@@ -67148,7 +67985,7 @@ function runCommand(s, parsed, text, env) {
 			const res = s.money.addExpense(cents, cat, note ? `[Telegram] ${note}` : "[Telegram]", /* @__PURE__ */ new Date(), true);
 			const cur = res.state.currency || "MDL";
 			return {
-				reply: formatExpenseResponse(formatMoney$2(cents, cur), cat, note || null, formatMoney$2(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
+				reply: formatExpenseResponse(formatMoney$1(cents, cur), cat, note || null, formatMoney$1(Math.max(0, res.state.today.remaining), cur), res.awarded ? 3 : 0),
 				expense: {
 					amount: cents,
 					category: res.expense?.category ?? cat,
@@ -68647,7 +69484,7 @@ function armSmart(list, s) {
 }
 // src/renderer/src/web/webBots.ts
 var LOGS_KEY = "life_bot_logs";
-var store = typeof localStorage !== "undefined" ? localStorage : null;
+var store = hostStore();
 /** Sport Track's checklist on this device: a rep sent from Telegram counts today. */
 function addRepsToSportTrack(name, amount, sets, extra) {
 	let prog = null;
@@ -74411,7 +75248,7 @@ function hubView(raw, today) {
 	const goals = (state.goals ?? []).filter((g) => g && !g.archived && !g.deleted && Number(g.target) > 0).slice(0, 6).map((g) => {
 		let st = null;
 		try {
-			st = goalStatus(state, today, g);
+			st = goalStatus$1(state, today, g);
 		} catch {
 			st = null;
 		}

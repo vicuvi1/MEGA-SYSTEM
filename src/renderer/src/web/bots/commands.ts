@@ -15,8 +15,10 @@ import { answerLocal, financeStateFrom } from '../botBrain'
 import { esc } from './telegram'
 import { sleepKeyboard, STOP_KEYBOARD, stoppedReply, ruleCoins } from './helpers'
 import { setsText } from '@core/sportSets'
+import { hostStore } from '../bigStore'
 
-const store = typeof localStorage !== 'undefined' ? localStorage : null
+// Money's own data lives in IndexedDB behind this store (web/bigStore.ts); every other key is plain localStorage.
+const store = hostStore()
 
 export type RunOut = { reply: string; keyboard?: any; sport?: { name: string; amount: number; sets?: number[]; kg?: number; best?: boolean; unit?: string }; expense?: { amount: number; category: string; note: string; type?: 'expense' | 'income' }; unknown?: boolean }
 

@@ -17,9 +17,9 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       await pg.waitForTimeout(800)
       frame = await financeFrame().catch((e) => { if (Date.now() > end) throw e; return null })
     }
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     const seed = () => pg.evaluate((k) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       const d = new Date()
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       st.tx = st.tx.filter((t) => !String(t.id).startsWith('smoke-rx-'))
@@ -31,7 +31,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       st.settings.logView = 'list'
       st.meta = { ...(st.meta || {}), sheetIntro: 1 }
       st.settings.updatedAt = Date.now()
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, KEY)
     const row = '.tx[data-act="edit"][data-id="smoke-rx-1"]'
     // Seed, reload the app and open the Log on the seeded record. A slow start (or a sync that
@@ -44,7 +44,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
         await pg.waitForTimeout(2800)
         try {
           frame = await financeFrame()
-          await frame.waitForFunction(() => !!document.querySelector('#app')?.firstElementChild && !!JSON.parse(localStorage.getItem('finance-helper.state') || '{}').tx?.some((t) => t.id === 'smoke-rx-1'), null, { timeout: 11000 })
+          await frame.waitForFunction(() => !!document.querySelector('#app')?.firstElementChild && !!JSON.parse(moneyStore.getItem('finance-helper.state') || '{}').tx?.some((t) => t.id === 'smoke-rx-1'), null, { timeout: 11000 })
           await frame.evaluate(() => { location.hash = '#home'; setTimeout(() => { location.hash = '#log' }, 50) })
           await frame.waitForSelector(row, { timeout: 13200 })
           return
@@ -58,7 +58,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       const month = await frame.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
       const read = () => frame.evaluate(async (m) => {
         const M = await import(new URL('./js/model.js', location.href).href)
-        const st = M.normalizeState(JSON.parse(localStorage.getItem('finance-helper.state')))
+        const st = M.normalizeState(JSON.parse(moneyStore.getItem('finance-helper.state')))
         const s = M.monthSummary(st, m)
         const by = (id) => s.byCategory.find((r) => r.id === id)?.amount || 0
         const t = st.tx.find((x) => x.id === 'smoke-rx-1')
@@ -79,7 +79,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       await frame.selectOption('#rf-f-f-smokeproject', 'Website')
       await frame.fill('#tx-note', 'Smoke supermarket #smoketrip')
       await frame.click('#tx-form button[type="submit"]')
-      await frame.waitForFunction(() => { const st = JSON.parse(localStorage.getItem('finance-helper.state')); return (st.tx.find((x) => x.id === 'smoke-rx-1')?.splits || []).length === 2 }, null, { timeout: 7700 })
+      await frame.waitForFunction(() => { const st = JSON.parse(moneyStore.getItem('finance-helper.state')); return (st.tx.find((x) => x.id === 'smoke-rx-1')?.splits || []).length === 2 }, null, { timeout: 7700 })
       const after = await read()
       if (after.expense !== before.expense) throw new Error(`Spent changed: ${before.expense} -> ${after.expense}`)
       if (after.food !== before.food - 20000 || after.home !== before.home + 20000) throw new Error(`categories are not 400 / 200: food ${before.food} -> ${after.food}, home ${before.home} -> ${after.home}`)
@@ -101,7 +101,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       const exported = await frame.evaluate(async () => {
         const X = await import(new URL('./js/moneyexport.js', location.href).href)
         const M = await import(new URL('./js/model.js', location.href).href)
-        const st = M.normalizeState(JSON.parse(localStorage.getItem('finance-helper.state')))
+        const st = M.normalizeState(JSON.parse(moneyStore.getItem('finance-helper.state')))
         const rows = X.txRows(st)
         const col = rows[0].indexOf('Field: Smokeproject')
         return col < 0 ? null : rows.find((r) => r[0] === 'smoke-rx-1')?.[col]
@@ -112,7 +112,7 @@ export async function moneyRecordXSteps({ step, pg, open, financeFrame }) {
       await frame.waitForSelector('[data-testid="tag-report-row"][data-tag="smoketrip"]', { timeout: 8800 })
     } finally {
       if (original != null) {
-        await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+        await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
         const f = await financeFrame()
         await f.evaluate(() => { location.hash = '#home'; location.reload() })
         await pg.waitForTimeout(1650)

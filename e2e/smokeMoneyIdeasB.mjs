@@ -51,7 +51,7 @@ export async function moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx 
       const askKey = `${old.getFullYear()}-${pad(old.getMonth() + 1)}`
       // Anything waiting to be saved goes out first, so the page cannot write its old copy over the seed on reload.
       window.dispatchEvent(new Event('pagehide'))
-      const raw = localStorage.getItem(KEY)
+      const raw = moneyStore.getItem(KEY)
       const base = JSON.parse(raw)
       const t = (id, date, amount, extra = {}) => ({ id: `${id}-${tag}`, type: 'expense', amount, currency: 'MDL', rate: 1, base: amount, date, category: 'food', account: 'card', note: '', createdAt: 1, updatedAt: 1, ...extra })
       const next = {
@@ -65,7 +65,7 @@ export async function moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx 
           t('mb-9', `${askKey}-20`, 50000, { type: 'income', category: 'work', note: 'Old job' }),
         ],
       }
-      localStorage.setItem(KEY, JSON.stringify(next))
+      moneyStore.setItem(KEY, JSON.stringify(next))
       setTimeout(() => location.reload(), 0)
       const label = new Date(old.getFullYear(), old.getMonth(), 1).toLocaleString('en-US', { month: 'long' })
       return { raw, askKey, label: `${label} ${old.getFullYear()}`, today: iso(now), day: now.getDate() }
@@ -144,7 +144,7 @@ export async function moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx 
     await frame.evaluate(() => { location.hash = '#home' })
     await frame.waitForSelector('[data-testid="quick-add"]', { timeout: 10000 })
     if (day >= 4) {
-      if (!(await card.count())) throw new Error(`no "Salary not in yet" card though the pay day (the 1st) + 2 days has passed (day ${day}, ${JSON.stringify(await frame.evaluate((KEY) => JSON.parse(localStorage.getItem(KEY)).settings.salary, KEY))}, ${(await frame.locator('[data-testid="salary-hourly"]').count())})`)
+      if (!(await card.count())) throw new Error(`no "Salary not in yet" card though the pay day (the 1st) + 2 days has passed (day ${day}, ${JSON.stringify(await frame.evaluate((KEY) => JSON.parse(moneyStore.getItem(KEY)).settings.salary, KEY))}, ${(await frame.locator('[data-testid="salary-hourly"]').count())})`)
       if (!/Salary not in yet \(due 1 /.test((await card.innerText()).replace(/\s+/g, ' '))) throw new Error(`card: ${await card.innerText()}`)
     } else if (await card.count()) throw new Error('the salary card shows before pay day + 3')
     await frame.evaluate(() => { location.hash = '#settings' })
@@ -155,7 +155,7 @@ export async function moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx 
     await frame.press('[data-sal="day"]', 'Tab')
     await settle()
     frame = await reloadFrame()
-    const saved = await frame.evaluate((KEY) => JSON.parse(localStorage.getItem(KEY)).settings.salary, KEY)
+    const saved = await frame.evaluate((KEY) => JSON.parse(moneyStore.getItem(KEY)).settings.salary, KEY)
     if (!saved || saved.day !== 2 || saved.amount !== 98765432) throw new Error(`salary setting after reload: ${JSON.stringify(saved)}`)
   })
 
@@ -227,14 +227,14 @@ export async function moneyIdeasBSteps({ step, pg, open, financeFrame, storedTx 
     const frame = await financeFrame()
     await pg.waitForTimeout(1500)
     await frame.evaluate(([KEY, settings, tag, keep]) => {
-      const s = JSON.parse(localStorage.getItem(KEY))
+      const s = JSON.parse(moneyStore.getItem(KEY))
       const mine = (x) => x.id.endsWith(`-${tag}`) || !keep.includes(x.id)
       s.deleted = { ...(s.deleted || {}) }
       for (const x of s.tx.filter(mine)) s.deleted[x.id] = Date.now()
       s.tx = s.tx.filter((x) => !mine(x))
       if ('salary' in settings) s.settings.salary = settings.salary; else delete s.settings.salary
       s.settings.updatedAt = Date.now()
-      localStorage.setItem(KEY, JSON.stringify(s))
+      moneyStore.setItem(KEY, JSON.stringify(s))
     }, [KEY, original, tag, origIds])
     await reloadFrame()
     const left = (await storedTx()).filter((x) => x.id.endsWith(`-${tag}`) || !origIds.includes(x.id)).length

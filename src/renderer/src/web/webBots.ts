@@ -123,9 +123,11 @@ import { answerPromise, promiseReminder, readPromise, readPromiseAnswer, type Pr
 import { readSmartRemind, smartPlan, type SmartReminder } from '@core/benSmartRemind'
 import { breakdownPrompt, parseSteps, readBreakdown, stepTask, templateSteps, type Step } from '@core/benBreak'
 import { answerOffer, forgetAbout, learnedRhythm, loadConvo, loadKnow, notePast, notePlan, pushedBack, queueOffer, runTool, saveCorrection } from './benMind'
+import { hostStore } from './bigStore'
 
 const LOGS_KEY = 'life_bot_logs'
-const store = typeof localStorage !== 'undefined' ? localStorage : null
+// Money's own data lives in IndexedDB behind this store (web/bigStore.ts); every other key is plain localStorage.
+const store = hostStore()
 
 /** Extra bits of a sport message: backpack weight, a declared best set, hold or reps. */
 interface SportExtra { kg?: number; best?: boolean; unit?: string }

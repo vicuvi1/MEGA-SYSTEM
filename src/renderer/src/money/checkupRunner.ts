@@ -10,6 +10,7 @@ import type { Notif } from '@core/notify'
 import { normalizeState } from '../../public/apps/finance/js/model.js'
 // @ts-ignore plain JS module from the embedded app
 import { checkupDue } from '../../public/apps/finance/js/checkup.js'
+import { hostStore } from '../web/bigStore'
 
 /** The month this device already sent its reminder for. */
 export const CHECKUP_SENT_KEY = 'life_checkup_sent'
@@ -49,7 +50,7 @@ async function runOnce(): Promise<void> {
     const { life } = await import('../bridge')
     if (!life.notifications?.add) return
     let store: Storage | null = null
-    try { store = window.localStorage } catch { /* blocked */ }
+    try { store = hostStore() ?? window.localStorage } catch { /* blocked */ }
     await checkCheckup({
       store,
       add: (n) => life.notifications!.add!(n),

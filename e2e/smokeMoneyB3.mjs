@@ -19,12 +19,12 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
   }
   // Put made-up data into the stored copy, then reload Finance Helper so it reads it.
   const seed = async (edit) => {
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await pg.evaluate(([k, src]) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       // eslint-disable-next-line no-new-func
       new Function('st', src)(st)
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, [KEY, edit])
     const frame = await financeFrame()
     await frame.evaluate(() => location.reload())
@@ -33,14 +33,14 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
   }
   const restore = async (original) => {
     if (original == null) return
-    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+    await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
     const frame = await financeFrame()
     await frame.evaluate(() => location.reload())
     await pg.waitForTimeout(1500)
   }
   const model = (frame, fn, arg) => frame.evaluate(async ([src, a]) => {
     const M = await import(new URL('./js/model.js', location.href).href)
-    const st = JSON.parse(localStorage.getItem('finance-helper.state'))
+    const st = JSON.parse(moneyStore.getItem('finance-helper.state'))
     // eslint-disable-next-line no-new-func
     return new Function('M', 'st', 'a', src)(M, M.normalizeState(st), a)
   }, [fn, arg])
@@ -90,16 +90,16 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
       await frame.waitForSelector('[data-testid="bulk-count"]', { timeout: 4000 })
       if (!/3 selected/.test(await frame.locator('[data-testid="bulk-count"]').innerText())) throw new Error('the bar does not say 3 selected')
       if (shots) await pg.setViewportSize({ width: 1920, height: 1000 }).then(() => frame.locator('.bulk-bar').screenshot({ path: `${shots}/money-b3-selection-bar.png` })).catch(() => {})
-      const cats = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).map((t) => t.category), KEY)
-      const count = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length, KEY)
+      const cats = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).map((t) => t.category), KEY)
+      const count = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length, KEY)
       await frame.selectOption('select[data-bulk="category"]', 'transport')
       await frame.waitForSelector('[data-testid="bulk-confirm-text"]', { timeout: 4000 })
       if (!/3 records/.test(await frame.locator('[data-testid="bulk-confirm-text"]').innerText())) throw new Error('the confirm does not show the count')
       if ((await cats()).some((c) => c !== 'food')) throw new Error('records changed before the confirm')
       await frame.click('[data-testid="bulk-confirm-ok"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-') && t.category === 'transport').length === 3, KEY, { timeout: 10000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-') && t.category === 'transport').length === 3, KEY, { timeout: 10000 })
       await clickToast(frame)
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-') && t.category === 'food').length === 3, KEY, { timeout: 8000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-') && t.category === 'food').length === 3, KEY, { timeout: 8000 })
       // Delete: confirm, then gone, then Undo.
       await frame.waitForSelector('[data-testid="bulk-del"]', { timeout: 4000 }).catch(async () => { await frame.click('#tx-table [data-act="sel-all"]') })
       if (!(await frame.locator('[data-testid="bulk-del"]').count())) await frame.click('#tx-table [data-act="sel-all"]')
@@ -107,9 +107,9 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
       await frame.waitForSelector('[data-testid="bulk-confirm-text"]', { timeout: 4000 })
       if ((await count()) !== 3) throw new Error('records were deleted before the confirm')
       await frame.click('[data-testid="bulk-confirm-ok"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length === 0, KEY, { timeout: 15000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length === 0, KEY, { timeout: 15000 })
       await clickToast(frame)
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length === 3, KEY, { timeout: 8000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b3-')).length === 3, KEY, { timeout: 8000 })
     } finally {
       await restore(original)
     }
@@ -128,12 +128,12 @@ export async function moneyB3Steps({ step, pg, open, financeFrame }) {
       await frame.evaluate(() => { location.hash = '#home' })
       await frame.waitForSelector('[data-testid="cash-count-card"]', { timeout: 10000 })
       if (shots) await pg.setViewportSize({ width: 1920, height: 1000 }).then(() => frame.locator('[data-testid="cash-count-card"]').screenshot({ path: `${shots}/money-b3-cash-card.png` })).catch(() => {})
-      const recs = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.note === 'Cash count').length, KEY)
+      const recs = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.note === 'Cash count').length, KEY)
       await frame.fill('[data-testid="cash-count-input"]', '123456')
       await frame.click('[data-testid="cash-count-save"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.note === 'Cash count').length === 1, KEY, { timeout: 10000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.note === 'Cash count').length === 1, KEY, { timeout: 10000 })
       await clickToast(frame)
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.note === 'Cash count').length === 0, KEY, { timeout: 8000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.note === 'Cash count').length === 0, KEY, { timeout: 8000 })
       await frame.waitForSelector('[data-testid="cash-count-card"]', { timeout: 6000 })
       await frame.click('[data-testid="cash-count-same"]')
       await frame.waitForFunction(() => !document.querySelector('[data-testid="cash-count-card"]'), null, { timeout: 6000 })

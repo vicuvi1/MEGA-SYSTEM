@@ -14,6 +14,8 @@ import { Mirror, type MirrorStore } from './mirror'
 import { TursoHttp } from './tursoHttp'
 import { createAppSync } from './appSync'
 import { FINANCE } from './financeSync'
+import { createBigStore, moneyMerge, MONEY_MARK } from './bigStore'
+import { fakeIdb, memLocal } from './fakeIdb'
 import { diffRows, encodePending, schemaInfo } from './desktopSync'
 import { getSetting, setSetting } from '../../../main/settings'
 // @ts-ignore plain JS module from the embedded app
@@ -66,9 +68,59 @@ describe.skipIf(!process.env.PERF)(`Money at ${N.toLocaleString('en-US')} record
     const [tSave, raw] = await time(() => JSON.stringify(s0))
     const [tLoad] = await time(() => normalizeState(JSON.parse(raw)))
     const shared = JSON.stringify(FINANCE.share!(s0))
-    row('Money on this device (characters)', `${(raw.length / 1e6).toFixed(1)} M, kept 2 to 3 times in localStorage (limit about 5 M)`, `${(raw.length / 1e6).toFixed(1)} M once in localStorage; the sync's copies (${(shared.length / 1e6).toFixed(1)} M each) in IndexedDB`)
+    row('Money on this device (characters)', `${(raw.length / 1e6).toFixed(1)} M, kept 2 to 3 times in localStorage (limit about 5 M)`, `${(raw.length / 1e6).toFixed(1)} M in IndexedDB (no 5 M limit), and the sync's copies (${(shared.length / 1e6).toFixed(1)} M each) too`)
     row('Save (JSON text of all records)', ms(tSave), ms(tSave))
     row('Load (parse + check every record)', ms(tLoad), ms(tLoad))
+
+    // ---- Money's own data through the device store (IndexedDB behind it) ------
+    // The small storage holds 5 M characters, as a browser's does; the IndexedDB is a stand-in in
+    // memory, so these times are the store's own work (the real disk write is on top, off the page thread).
+    {
+      const small = memLocal(5_000_000)
+      small.setItem(MONEY_MARK, 'idb')
+      const idb = fakeIdb()
+      const dev = createBigStore({ local: small, idb: idb.factory, win: null, merge: moneyMerge })
+      await dev.ready
+      expect(() => small.setItem(KEY, raw)).toThrow() // what happened before: it does not fit
+      const [tPut] = await time(async () => {
+        dev.setItem(KEY, raw)
+        await dev.flush()
+      })
+      expect(idb.data.get(KEY)).toBe(raw)
+      expect(small.getItem(KEY)).toBeNull()
+      const [tAnswer] = await time(() => dev.getItem(KEY))
+      // The next start: open, read everything, parse and check every record.
+      const [tStart, loaded] = await time(async () => {
+        const next = createBigStore({ local: small, idb: idb.factory, win: null, merge: moneyMerge })
+        await next.moveIn()
+        return normalizeState(JSON.parse(next.getItem(KEY)!))
+      })
+      expect(loaded.tx).toHaveLength(N)
+      // Another window saved meanwhile (this one had not heard): the two are merged, no record lost.
+      const mine = JSON.stringify(state([...tx, { ...tx[3], id: 'tx_this_window', updatedAt: Date.now() }]))
+      idb.data.set(KEY, JSON.stringify(state([...tx, { ...tx[4], id: 'tx_other_window', updatedAt: Date.now() }])))
+      const [tMerge] = await time(async () => {
+        dev.setItem(KEY, mine)
+        await dev.flush()
+      })
+      expect(JSON.parse(idb.data.get(KEY)!).tx).toHaveLength(N + 2)
+      // The one-time move of about the most a browser's localStorage could hold (19,000 records).
+      const half = JSON.stringify(state(records(Math.min(N, 19_000))))
+      const old = memLocal(5_000_000)
+      const fits = half.length < 4_900_000
+      if (fits) old.setItem(KEY, half)
+      const idb2 = fakeIdb()
+      const mover = createBigStore({ local: old, idb: idb2.factory, win: null, merge: moneyMerge })
+      const [tMove] = await time(() => mover.moveIn())
+      if (fits) {
+        expect(idb2.data.get(KEY)).toBe(half)
+        expect(old.getItem(KEY)).toBeNull()
+      }
+      row('Save all of Money on this device (the write itself)', `refused: ${(raw.length / 1e6).toFixed(1)} M characters do not fit localStorage`, `${ms(tPut)} to hand it over and have it confirmed; reading it back takes ${ms(tAnswer)} (from memory)`)
+      row('Start: open the store, read Money, check every record', `not possible at this size`, ms(tStart))
+      row('A save that meets another window\'s save (merged, not replaced)', 'the later one silently replaced the other', ms(tMerge))
+      row('One-time move out of localStorage (19,000 records, written, read back, compared)', '-', fits ? `${ms(tMove)} for ${(half.length / 1e6).toFixed(1)} M characters` : 'the sample does not fit localStorage')
+    }
 
     // ---- The website: first upload, then one edited record -----------------
     const remote = new SQL.Database()

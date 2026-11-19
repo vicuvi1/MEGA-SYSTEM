@@ -94,6 +94,27 @@ export async function offlineSteps({ step, browser, clock }) {
           try { for (let n = 0; ; n++) localStorage.setItem('zz_fill_' + n, big) } catch { /* full */ }
           try { for (let n = 0; ; n++) localStorage.setItem('zz_fine_' + n, small) } catch { /* full */ }
         })
+        // The waiting changes are kept in IndexedDB now, so a full localStorage alone no longer loses them:
+        // the store takes a write and keeps it.
+        const kept = await pg.evaluate(async () => {
+          const s = window.__lifeStore
+          s.setItem('life_sync_app_sync_smoke', 'kept with the small storage full')
+          await s.flush()
+          const inSmall = localStorage.getItem('life_sync_app_sync_smoke')
+          const where = s.status().keys.find((k) => k.key === 'life_sync_app_sync_smoke')?.where
+          s.removeItem('life_sync_app_sync_smoke')
+          await s.flush()
+          return { inSmall, where }
+        })
+        if (kept.where !== 'indexeddb' || kept.inSmall != null) throw new Error(`with localStorage full a big copy was not kept in IndexedDB (${JSON.stringify(kept)})`)
+        // "Not saved yet" is for when the device can store it nowhere: IndexedDB refuses too (made to, here).
+        await pg.evaluate(() => {
+          window.__realPut = IDBObjectStore.prototype.put
+          IDBObjectStore.prototype.put = function (...args) {
+            if (this.transaction?.db?.name === 'life-big-store') throw new DOMException('The quota has been exceeded.', 'QuotaExceededError')
+            return window.__realPut.apply(this, args)
+          }
+        })
         if (!(await pg.locator('[data-testid="tn-sleep-form"]').count())) await pg.click('[data-testid="tn-sleep-open"]')
         await pg.fill('[data-testid="tn-sleep-form"] input[aria-label="Asleep at"]', '23:05')
         await pg.fill('[data-testid="tn-sleep-form"] input[aria-label="Up at"]', '06:35')
@@ -101,7 +122,7 @@ export async function offlineSteps({ step, browser, clock }) {
         await until(async () => /Not saved yet/.test(await toasts(pg)), 8000, 'no "Not saved yet" toast')
         if (/Last night saved/.test(await toasts(pg))) throw new Error('the toast still says "Last night saved"')
         // Space again and back online: the change that waited in memory still arrives.
-        await pg.evaluate(() => { for (const k of Object.keys(localStorage)) if (/^zz_/.test(k)) localStorage.removeItem(k) })
+        await pg.evaluate(() => { IDBObjectStore.prototype.put = window.__realPut; for (const k of Object.keys(localStorage)) if (/^zz_/.test(k)) localStorage.removeItem(k) })
         await d.goOnline()
         await until(async () => (await srv.sql('SELECT bed_time, wake_time FROM sleep_logs')).some((r) => r[0] === '23:05' && r[1] === '06:35'), 30000, 'the night typed with a full storage never reached the server')
         if (d.errors.length) throw new Error(`page errors: ${d.errors.slice(0, 2).join(' | ')}`)

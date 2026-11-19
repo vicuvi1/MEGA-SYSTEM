@@ -22,12 +22,12 @@ export async function moneyB2Steps({ step, pg, open, financeFrame, resetClock })
     return frame
   }
   const seed = async (edit) => {
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await pg.evaluate(([k, src]) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       // eslint-disable-next-line no-new-func
       new Function('st', src)(st)
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, [KEY, edit])
     const frame = await financeFrame()
     await frame.evaluate(() => location.reload())
@@ -37,12 +37,12 @@ export async function moneyB2Steps({ step, pg, open, financeFrame, resetClock })
   const restore = async (original) => {
     await pg.context().clock.setSystemTime(resetClock())
     if (original == null) return
-    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+    await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
     const frame = await financeFrame()
     await frame.evaluate(() => { try { localStorage.removeItem('finance-helper.monthReviewDismissed') } catch {} location.reload() })
     await pg.waitForTimeout(1500)
   }
-  const stored = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)), KEY)
+  const stored = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)), KEY)
   const SEED = `
     const now = Date.now();
     st.tx = st.tx.filter((t) => !String(t.id).startsWith('smoke-b2-'));
@@ -78,7 +78,7 @@ export async function moneyB2Steps({ step, pg, open, financeFrame, resetClock })
       const live = await frame.evaluate(async () => {
         const L = await import(new URL('./js/monthreview.js', location.href).href)
         const M = await import(new URL('./js/model.js', location.href).href)
-        const s = M.normalizeState(JSON.parse(localStorage.getItem('finance-helper.state')))
+        const s = M.normalizeState(JSON.parse(moneyStore.getItem('finance-helper.state')))
         const nw = L.netWorthLine(s, '2031-03-03')
         return { n: nw.points.length, jan: nw.points.find((p) => p.key === '2031-01').value, feb: nw.points.find((p) => p.key === '2031-02').value, today: nw.points.at(-1).value, now: nw.now }
       })
@@ -132,9 +132,9 @@ export async function moneyB2Steps({ step, pg, open, financeFrame, resetClock })
       // Unticked ones are not saved.
       await frame.fill('[data-b2-val="food"]', '480')
       await frame.click('[data-testid="b2-save"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).settings.categories.find((c) => c.id === 'food').budget === 48000, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).settings.categories.find((c) => c.id === 'food').budget === 48000, KEY, { timeout: 6000 })
       await frame.evaluate(() => document.querySelector('#toast button')?.click())
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).settings.categories.find((c) => c.id === 'food').budget === 40000, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).settings.categories.find((c) => c.id === 'food').budget === 40000, KEY, { timeout: 6000 })
     } finally {
       await restore(original)
     }
@@ -168,7 +168,7 @@ export async function moneyB2Steps({ step, pg, open, financeFrame, resetClock })
       await row.locator('[data-op="keep"]').click()
       await pg.waitForTimeout(400)
       await frame.locator('[data-testid="b2-sub-row"]', { hasText: 'Smoke music app' }).locator('[data-op="remind"]').click()
-      await pg.waitForFunction((k) => { const s = JSON.parse(localStorage.getItem(k)).settings; return !!s.subsKept?.['rec:smoke-b2-rec'] && !!s.subsRemind?.['rec:smoke-b2-rec'] }, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => { const s = JSON.parse(moneyStore.getItem(k)).settings; return !!s.subsKept?.['rec:smoke-b2-rec'] && !!s.subsRemind?.['rec:smoke-b2-rec'] }, KEY, { timeout: 6000 })
       await frame.evaluate(() => location.reload())
       await pg.waitForTimeout(2500)
       await frame.evaluate(() => { location.hash = '#plan' })

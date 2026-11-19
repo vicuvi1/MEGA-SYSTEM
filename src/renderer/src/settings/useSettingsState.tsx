@@ -12,6 +12,7 @@ import { useSaved } from '../settingsUi'
 import { addDays } from '@core/dates'
 import { useAction } from '../ui'
 import { soundCoin, soundFanfare, soundMechanicalClick, soundSuccess, soundWarning } from '../soundKit'
+import { hostStore } from '../web/bigStore'
 
 export function downloadBlob(content: string, mime: string, filename: string) {
   const blob = new Blob([content], { type: mime })
@@ -559,7 +560,9 @@ export function useSettingsState({ auth, onAuth, backup, onBackup, onRestored, u
       if (data.app === 'finance-helper' || (Array.isArray(data.tx) && data.tx.length > 0)) {
         const count = Array.isArray(data.tx) ? data.tx.length : 0
         if (!await askConfirm(`Import Finance Helper backup from "${file.name}" (${count} transactions)?`)) return
-        localStorage.setItem('finance-helper.state', JSON.stringify(data))
+        const money = hostStore() ?? localStorage
+        money.setItem('finance-helper.state', JSON.stringify(data))
+        await (money as { flush?: () => Promise<void> }).flush?.()
         importedType = `Finance Helper (${count} transactions)`
       }
       // 2. Waky sleep companion standalone backup (e.g. waky.json)
@@ -585,7 +588,11 @@ export function useSettingsState({ auth, onAuth, backup, onBackup, onRestored, u
           // The real thing: every table back, on every device (PIN and bot setup kept).
           await life.data.restoreSnapshot(text)
         } else {
-          if (data.financeState) localStorage.setItem('finance-helper.state', JSON.stringify(data.financeState))
+          if (data.financeState) {
+            const money = hostStore() ?? localStorage
+            money.setItem('finance-helper.state', JSON.stringify(data.financeState))
+            await (money as { flush?: () => Promise<void> }).flush?.()
+          }
           if (data.wakyState) localStorage.setItem('waky_web_data_v2', JSON.stringify(data.wakyState))
         }
         importedType = 'Full Life System backup'

@@ -8,6 +8,7 @@ import { dayKey } from '@core/dates'
 import { getSetting, setSetting } from '../../../main/settings'
 import type { RulesView, SortUndo, SortView, ToSortList, TypedAmount } from './moneySortCore'
 import type { WebServices } from './webServices'
+import { hostStore } from './bigStore'
 
 /**
  * Does this Finance record pay "Spending logged" for its day (Life's
@@ -48,7 +49,7 @@ export interface SortApi {
 }
 
 const LOCAL = 'finance-helper.state'
-const store = () => (typeof localStorage !== 'undefined' ? localStorage : null)
+const store = () => hostStore()
 const localRaw = (): string | null => {
   try {
     return store()?.getItem(LOCAL) ?? null

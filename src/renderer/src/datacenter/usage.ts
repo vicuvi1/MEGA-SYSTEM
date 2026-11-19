@@ -16,6 +16,8 @@ import {
   localMeter,
   localUsage,
   meter,
+  moneyMeter,
+  moneyWhere,
   moneyRecords,
   prunableTombstones,
   recordRate,
@@ -34,7 +36,7 @@ import {
 } from '@core/dataCenter'
 import type { DataDeviceSeen, DataUsage } from '@shared/api'
 import { life } from '../bridge'
-import { hostStore } from '../web/bigStore'
+import { hostStore, isAppKey, MONEY_KEY, OUTBOX_KEY } from '../web/bigStore'
 
 /** The apps that keep their own data on the device and sync it as one copy. */
 export const DATA_APPS = [
@@ -270,7 +272,15 @@ export async function gather(sample = true): Promise<Gathered> {
   const bigStore = hostStore()
   await bigStore?.ready.catch(() => {})
   const big = bigStore?.status() ?? null
-  const inIdb = (big?.keys ?? []).filter((k) => k.where === 'indexeddb')
+  // Money's own data and the website's waiting changes have their own lines; the rest are the sync's copies.
+  const inIdb = (big?.keys ?? []).filter((k) => k.where === 'indexeddb' && !isAppKey(k.key) && k.key !== OUTBOX_KEY)
+  const moneyBar = big ? moneyMeter(big) : null
+  const moneyInIdb = !!big && moneyWhere(big) === 'indexeddb'
+  if (moneyBar) meters.push(moneyBar)
+  if (moneyInIdb) {
+    const i = meters.findIndex((m) => m.id === 'local')
+    if (i >= 0) meters[i] = { ...meters[i], where: 'This device (localStorage): the apps\' own data, except Money (now in IndexedDB, below)' }
+  }
   if (big)
     meters.push(
       meter({
@@ -322,14 +332,14 @@ export async function gather(sample = true): Promise<Gathered> {
   }
 
   // Growth: Money from its records' own dates (most of what grows), everything from the daily samples.
-  const money = parse<Record<string, unknown>>(s?.getItem('finance-helper.state'))
+  const money = parse<Record<string, unknown>>((bigStore ?? s)?.getItem(MONEY_KEY))
   const recs = money ? moneyRecords(money) : []
   const r90 = recs.length ? recordRate(recs, now, 90) : null
   const r365 = recs.length ? recordRate(recs, now, 365) : null
   const k = ratio(settingOf(db, 'app_sync_finance'))
   const forecasts: Forecast[] = []
   for (const m of meters) {
-    if (m.limit == null || m.id === 'history' || m.id === 'browser') continue
+    if (m.limit == null || m.id === 'history' || m.id === 'browser' || m.id === 'money') continue
     const fromSamples = { perDay: sampleRate(m.id === 'local' ? mine : synced, m.id, today), from: 'The daily size samples this page has taken (up to the last 180 days).' }
     const rates: { perDay: number | null; from: string }[] = [fromSamples]
     if (m.id === 'sync:app_sync_finance' || m.id === 'settings' || m.id === 'cloud') {
@@ -337,6 +347,8 @@ export async function gather(sample = true): Promise<Gathered> {
     }
     // This device keeps Money twice (your records and the last synced copy), so it fills twice as fast.
     if (m.id === 'local' && s?.getItem('life_sync_app_sync_finance') != null) rates.push({ perDay: r90 == null ? null : r90 * 2, from: 'Twice the Money records of the last 90 days: this device keeps Money and its last synced copy.' }, { perDay: r365 == null ? null : r365 * 2, from: 'Twice the Money records of the last 12 months: this device keeps Money and its last synced copy.' })
+    // Money still in the app storage (not moved yet, or no IndexedDB here): it fills it as fast as Money grows.
+    if (m.id === 'local' && moneyBar && !moneyInIdb) rates.push({ perDay: r90, from: 'The size of the Money records you added in the last 90 days (Money is still in this storage).' }, { perDay: r365, from: 'The size of the Money records you added in the last 12 months (Money is still in this storage).' })
     forecasts.push(forecast(m, rates, now))
   }
 

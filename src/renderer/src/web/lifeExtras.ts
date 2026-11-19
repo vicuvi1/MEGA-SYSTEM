@@ -32,6 +32,7 @@ import type { CheckIn, GoalCard, GoalSource } from '@core/goals'
 import { parseGoalText, type GoalDraft } from '@core/goalsText'
 import { orderCards, starterGoals, type GoalMeta, type Starter } from '@core/goalKinds'
 import { financeFromDb, type CheckInResult, type GoalInput } from '../../../main/goals'
+import { hostStore } from './bigStore'
 
 const json = (db: any, key: string): any => {
   try {
@@ -513,7 +514,7 @@ export function saveUnlock(s: Services, rewardId: number, u: Unlock | null, now 
 
 /** What the app calls (life.extras), on the services once they're ready. */
 export function createExtras(svcP: Promise<WebServices>) {
-  const fin = (s: Services) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+  const fin = (s: Services) => financeStateFrom(s.db, hostStore())
   const read = async <T>(fn: (s: Services) => T) => (await svcP).read(fn)
   const write = async <T>(fn: (s: Services) => T, ...events: string[]) => (await svcP).write(fn, ...events)
   const W = 'life-wallet-changed'

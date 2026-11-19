@@ -19,11 +19,11 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
     }
     await pg.waitForTimeout(2500) // the embedded app finishes its start-up route
     frame = await financeFrame()
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     try {
       // Start from no sources and no old smoke records, without reloading: the app writes its own copy on the first save.
       const sheetGone = () => frame.waitForFunction(() => !document.querySelector('#sheet-root .sheet'), null, { timeout: 6000 })
-      const stored = () => frame.evaluate(() => JSON.parse(localStorage.getItem('finance-helper.state') || 'null'))
+      const stored = () => frame.evaluate(() => JSON.parse(moneyStore.getItem('finance-helper.state') || 'null'))
       const sources = async () => (await stored())?.settings?.incomeSources || []
       if ((await sources()).length) throw new Error('this copy already has income sources; the step needs a clean start')
 
@@ -42,7 +42,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
         await sheetGone()
       }
       await frame.waitForFunction(() => document.querySelectorAll('[data-testid="src-row"]').length === 2, null, { timeout: 5000 })
-      await frame.waitForFunction(() => (JSON.parse(localStorage.getItem('finance-helper.state'))?.settings?.incomeSources || []).length === 2, null, { timeout: 6000 })
+      await frame.waitForFunction(() => (JSON.parse(moneyStore.getItem('finance-helper.state'))?.settings?.incomeSources || []).length === 2, null, { timeout: 6000 })
       const made = await sources()
       if (made.map((s) => s.name).join() !== 'Job 1,Job 2') throw new Error(`wrong sources saved: ${JSON.stringify(made.map((s) => s.name))}`)
       const j1 = made[0].id
@@ -56,7 +56,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
       await frame.waitForSelector('[data-testid="qa-source"]', { timeout: 4000 })
       if (!(await frame.locator('[data-testid="qa-source"]').innerText()).includes('Job 2')) throw new Error('the quick add preview does not show Job 2')
       await frame.click('[data-testid="qa-save"]')
-      await frame.waitForFunction((id) => { const st = JSON.parse(localStorage.getItem('finance-helper.state')); return st.tx.some((t) => t.incomeSource === id && t.amount === 300000) }, j2, { timeout: 6000 })
+      await frame.waitForFunction((id) => { const st = JSON.parse(moneyStore.getItem('finance-helper.state')); return st.tx.some((t) => t.incomeSource === id && t.amount === 300000) }, j2, { timeout: 6000 })
 
       // 3. The add form: Earned, 1200, Source chip Job 1.
       await frame.click('.lt-add, [data-act="add"]')
@@ -67,7 +67,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
       await frame.locator('[data-testid="src-chip"]', { hasText: 'Job 1' }).click()
       if ((await frame.locator('[data-testid="src-chip"][aria-pressed="true"]').count()) !== 1) throw new Error('exactly one source chip should be picked')
       await frame.click('#tx-form button[type="submit"]')
-      await frame.waitForFunction((id) => { const st = JSON.parse(localStorage.getItem('finance-helper.state')); return st.tx.some((t) => t.incomeSource === id && t.amount === 120000) }, j1, { timeout: 6000 })
+      await frame.waitForFunction((id) => { const st = JSON.parse(moneyStore.getItem('finance-helper.state')); return st.tx.some((t) => t.incomeSource === id && t.amount === 120000) }, j1, { timeout: 6000 })
       // A new income record opens the jar split sheet; close it.
       await frame.waitForTimeout(400)
       if (await frame.locator('#sheet-root .sheet').count()) { await pg.keyboard.press('Escape'); await frame.waitForTimeout(300) }
@@ -81,7 +81,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
       const want = await frame.evaluate(async () => {
         const IS = await import(new URL('./js/incomesources.js', location.href).href)
         const M = await import(new URL('./js/model.js', location.href).href)
-        const st = M.normalizeState(JSON.parse(localStorage.getItem('finance-helper.state')))
+        const st = M.normalizeState(JSON.parse(moneyStore.getItem('finance-helper.state')))
         const d = new Date()
         const today = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         const rep = IS.sourceReport(st, today)
@@ -115,7 +115,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
         await frame.waitForSelector('[data-testid="src-row"]', { timeout: 6000 })
       })
       await frame.locator(`[data-testid="src-row"][data-id="${j2}"] [data-testid="src-archive"]`).click()
-      await frame.waitForFunction((id) => JSON.parse(localStorage.getItem('finance-helper.state')).settings.incomeSources.find((s) => s.id === id)?.archived === true, j2, { timeout: 6000 })
+      await frame.waitForFunction((id) => JSON.parse(moneyStore.getItem('finance-helper.state')).settings.incomeSources.find((s) => s.id === id)?.archived === true, j2, { timeout: 6000 })
       const after = await stored()
       if (after.tx.filter((t) => t.incomeSource === j2).length !== 1) throw new Error('archiving changed the records')
       await frame.evaluate(() => { location.hash = '#reports' })
@@ -126,7 +126,7 @@ export async function moneyIncomeSourcesSteps({ step, pg, open, financeFrame }) 
       throw e
     } finally {
       if (original != null) {
-        await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+        await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
         const f = await financeFrame()
         await f.evaluate(() => location.reload())
         await pg.waitForTimeout(1500)

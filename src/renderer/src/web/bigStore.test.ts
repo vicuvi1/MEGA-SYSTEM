@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import initSqlJs, { type SqlJsStatic } from 'sql.js'
 import { MIGRATIONS } from '@core/schema'
 import { createBigStore, isBigKey } from './bigStore'
+import { fakeIdb, memLocal } from './fakeIdb'
 import { handlePipeline } from './fakeTurso'
 import { Mirror } from './mirror'
 import { TursoHttp } from './tursoHttp'
@@ -15,99 +16,20 @@ import { FINANCE } from './financeSync'
 // @ts-ignore plain JS module from the embedded app
 import { normalizeState } from '../../public/apps/finance/js/model.js'
 
-function memLocal(quota = Infinity) {
-  const m = new Map<string, string>()
-  const used = () => [...m].reduce((n, [k, v]) => n + k.length + v.length, 0)
-  const s = {
-    getItem: (k: string) => (m.has(k) ? m.get(k)! : null),
-    setItem: (k: string, v: string) => {
-      if (used() - (m.has(k) ? k.length + m.get(k)!.length : 0) + k.length + String(v).length > quota) throw Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' })
-      m.set(k, String(v))
-    },
-    removeItem: (k: string) => void m.delete(k),
-    clear: () => m.clear(),
-    key: (i: number) => [...m.keys()][i] ?? null,
-    get length() {
-      return m.size
-    }
-  }
-  return s as unknown as Storage
-}
-
-/** A tiny IndexedDB: one database, one object store, requests answered on a later tick. */
-function fakeIdb(o: { failOpen?: boolean; corrupt?: (key: string, value: string) => string; failPut?: () => boolean } = {}) {
-  const data = new Map<string, string>()
-  const later = (fn: () => void) => void Promise.resolve().then(fn)
-  const request = <T,>(get: () => T) => {
-    const r: any = { result: undefined, error: null, onsuccess: null, onerror: null }
-    later(() => {
-      try {
-        r.result = get()
-        r.onsuccess?.()
-      } catch (e) {
-        r.error = e
-        r.onerror?.()
-      }
-    })
-    return r
-  }
-  const db = {
-    objectStoreNames: { contains: () => true },
-    createObjectStore: () => ({}),
-    transaction: (_name: string, mode = 'readonly') => {
-      const tx: any = { oncomplete: null, onerror: null, onabort: null, error: null }
-      let bad: Error | null = null
-      tx.objectStore = () => ({
-        get: (k: string) => request(() => data.get(k)),
-        getAll: () => request(() => [...data.values()]),
-        getAllKeys: () => request(() => [...data.keys()]),
-        put: (v: string, k: string) => {
-          if (o.failPut?.()) bad = Object.assign(new Error('The quota has been exceeded.'), { name: 'QuotaExceededError' })
-          else data.set(k, o.corrupt ? o.corrupt(k, v) : v)
-        },
-        delete: (k: string) => void data.delete(k)
-      })
-      if (mode === 'readwrite')
-        later(() =>
-          later(() => {
-            if (bad) {
-              tx.error = bad
-              tx.onerror?.()
-            } else tx.oncomplete?.()
-          })
-        )
-      return tx
-    }
-  }
-  const factory = {
-    open: () => {
-      const r: any = { result: db, error: null, onsuccess: null, onerror: null, onupgradeneeded: null }
-      later(() => {
-        if (o.failOpen) {
-          r.error = new Error('IndexedDB is blocked')
-          r.onerror?.()
-        } else {
-          r.onupgradeneeded?.()
-          r.onsuccess?.()
-        }
-      })
-      return r
-    }
-  }
-  return { factory: factory as unknown as IDBFactory, data }
-}
-
 const AGREED = 'life_sync_app_sync_finance'
 const BEFORE = 'life_sync_app_sync_finance_before_restore'
 
 describe('which keys move', () => {
-  it("an app's agreed copy and its copy from before a restore; nothing else", () => {
+  it("the big copies and nothing small", () => {
     expect(isBigKey(AGREED)).toBe(true)
     expect(isBigKey(BEFORE)).toBe(true)
     expect(isBigKey('life_sync_app_sync_waky')).toBe(true)
     expect(isBigKey('life_sync_app_sync_finance_status')).toBe(false)
-    expect(isBigKey('life_sync_app_sync_finance_sealed_mine')).toBe(false)
-    expect(isBigKey('finance-helper.state')).toBe(false)
+    expect(isBigKey('life_sync_app_sync_finance_restore')).toBe(false)
+    // Since 2026-11-18 also: the locked sync's whole copies, Money's own data, the website's waiting changes
+    // (web/moneyStore.test.ts has their rules).
+    for (const k of ['life_sync_app_sync_finance_sealed_mine', 'life_sync_app_sync_finance_sealed_seen', 'life_sync_app_sync_finance_sealed_plain', 'finance-helper.state', 'finance-helper.enc', 'life_offline_writes']) expect(isBigKey(k)).toBe(true)
+    for (const k of ['finance-helper.head', 'finance-helper.paint', 'finance-helper.store', 'life_offline_since', 'life_sync_history']) expect(isBigKey(k)).toBe(false)
   })
 })
 

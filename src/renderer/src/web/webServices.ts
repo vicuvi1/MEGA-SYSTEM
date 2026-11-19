@@ -45,9 +45,10 @@ import type { BrowserDb } from './browserDb'
 import type { Mirror } from './mirror'
 // @ts-ignore plain JS module of the embedded app (split records)
 import { expandSplits } from '../../public/apps/finance/js/splits.js'
+import { hostStore } from './bigStore'
 
 /** Finance Helper's data on this device (else the synced copy). */
-const financeOf = (s: { db: any }) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+const financeOf = (s: { db: any }) => financeStateFrom(s.db, hostStore())
 
 /** RL1: the point value with Finance Helper's fun limit, spending, rates and your hour. */
 export function shopValue(s: Services, now = new Date()) {

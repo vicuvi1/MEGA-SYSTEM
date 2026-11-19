@@ -1,36 +1,33 @@
-// The big copies the apps' sync keeps on this device, out of localStorage.
+// The big things this device keeps, out of localStorage and in IndexedDB:
+// Money's own data, the copies the apps' sync keeps, and the website's changes
+// waiting for a connection. The store itself is plain JavaScript in Finance
+// Helper (public/apps/finance/js/bigstore.js), because Money opened on its own
+// needs the very same one; read how it stays safe there. This file gives it
+// types and makes this window's store.
 //
-// localStorage gives one site about 5 million characters. Money alone was kept
-// there up to three times: the app's own data, the copy both sides last agreed
-// on (`life_sync_<setting>`), and the copy from before a restore
-// (`life_sync_<setting>_before_restore`). The last two now live in IndexedDB
-// (no such limit), behind the same getItem / setItem / removeItem the sync
-// already used, so nothing that reads them changed.
-//
-// How it stays safe:
-// - Reads and writes are answered from memory at once; the write to IndexedDB
-//   follows. `flush()` waits for it and throws if it failed, and the sync
-//   calls it before it reports "synced" (never a silent loss).
-// - Moving an old copy over: written to IndexedDB, read back in a NEW
-//   transaction, compared letter for letter, and only then removed from
-//   localStorage. If anything differs, the old copy stays where it is and is
-//   used from there.
-// - No IndexedDB (a private window, an old browser, a blocked store): the
-//   keys stay in localStorage exactly as before.
-// - A write still on its way when the page closes is also put in localStorage
-//   (if it fits) and picked up on the next start.
-// - Another tab's write arrives over a BroadcastChannel.
-//
-// Losing one of these copies loses no records: without an agreed copy the next
-// sync simply merges again (a union), and a restore also leaves a full backup.
-// The app's own data (finance-helper.state) is NOT here yet: see DECISIONS.md.
+// Use `hostStore()` wherever Life reads or writes one of those keys (it is a
+// `Storage`; every other key goes straight to localStorage). A plain
+// `localStorage.getItem('finance-helper.state')` finds nothing once Money has
+// moved. Whoever reports "saved" awaits `flush()` first.
 
-/** The keys that live here: an app's agreed copy and its copy from before a restore. */
-export const isBigKey = (key: string): boolean => /^life_sync_app_sync_[a-z]+(_before_restore)?$/.test(key)
+// @ts-ignore plain JS module from the embedded app
+import * as impl from '../../public/apps/finance/js/bigstore.js'
+// @ts-ignore plain JS module from the embedded app
+import { mergeLocal } from '../../public/apps/finance/js/sync.js'
+// @ts-ignore plain JS module from the embedded app
+import { normalizeState } from '../../public/apps/finance/js/model.js'
 
-const PENDING = 'life_big_pending:'
-const DB_NAME = 'life-big-store'
-const STORE = 'kv'
+/** Money's own data on this device (plain), and its sealed form while Money is locked with its PIN. */
+export const MONEY_KEY: string = impl.MONEY_KEY
+export const MONEY_ENC: string = impl.MONEY_ENC
+/** In localStorage: 'idb' once the new Money has started on this device (only then may its data move). */
+export const MONEY_MARK: string = impl.MONEY_MARK
+/** The website's changes waiting for a connection (web/mirror.ts). */
+export const OUTBOX_KEY: string = impl.OUTBOX_KEY
+/** The keys that live in IndexedDB. */
+export const isBigKey: (key: string) => boolean = impl.isBigKey
+/** Money's own data: moves only after the new Money has started once, and is merged, never replaced. */
+export const isAppKey: (key: string) => boolean = impl.isAppKey
 
 export interface BigStoreStatus {
   /** Where the big keys live on this device. */
@@ -39,6 +36,8 @@ export interface BigStoreStatus {
   error: string | null
   /** The big keys held (IndexedDB and any still in localStorage). */
   keys: { key: string; chars: number; where: 'indexeddb' | 'localStorage' }[]
+  /** Whether the new Money has started on this device (until then its data stays in localStorage). */
+  moneyMoved: boolean
 }
 
 export interface BigStore extends Storage {
@@ -47,6 +46,10 @@ export interface BigStore extends Storage {
   /** Waits until every write so far is stored; throws when one could not be. */
   flush(): Promise<void>
   status(): BigStoreStatus
+  /** The new Money has started here: its data may leave localStorage now. Resolves when it has moved (or stays, with the reason in status()). */
+  moveIn(): Promise<void>
+  /** The same store for another window of this page (the Money frame): it hears the others' changes, not its own. */
+  forWindow(win: Window | null): BigStore
 }
 
 interface ChannelLike {
@@ -54,275 +57,62 @@ interface ChannelLike {
   onmessage: ((e: { data: any }) => void) | null
 }
 
-const req = <T>(r: IDBRequest<T>): Promise<T> =>
-  new Promise((resolve, reject) => {
-    r.onsuccess = () => resolve(r.result)
-    r.onerror = () => reject(r.error ?? new Error('IndexedDB request failed'))
-  })
-const done = (tx: IDBTransaction): Promise<void> =>
-  new Promise((resolve, reject) => {
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error ?? new Error('IndexedDB transaction failed'))
-    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'))
-  })
-
-export function createBigStore(opts: { local: Storage; idb?: IDBFactory | null; isBig?: (key: string) => boolean; name?: string; channel?: ChannelLike | null; onError?: (message: string) => void }): BigStore {
-  const { local } = opts
-  const big = opts.isBig ?? isBigKey
-  const idb = opts.idb === undefined ? (typeof indexedDB !== 'undefined' ? indexedDB : null) : opts.idb
-  const cache = new Map<string, string>()
-  /** Keys written or removed here since the start: the load from disk must not undo them. */
-  const touched = new Set<string>()
-  /** Keys whose move failed its check: they stay in localStorage and are used from there. */
-  const stay = new Set<string>()
-  let mode: 'indexeddb' | 'localStorage' = 'localStorage'
-  let db: IDBDatabase | null = null
-  let error: string | null = null
-  /** Keys whose last write is stored nowhere on this device. */
-  const failed = new Map<string, Error>()
-  let tail: Promise<void> = Promise.resolve()
-  const waiting = new Map<string, string | null>()
-
-  const fail = (what: string, e: unknown) => {
-    error = `${what}: ${String((e as Error)?.message ?? (e as Error)?.name ?? e)}`.slice(0, 240)
-    try {
-      opts.onError?.(error)
-    } catch {
-      /* the listener's problem */
-    }
-  }
-  const safeGet = (k: string): string | null => {
-    try {
-      return local.getItem(k)
-    } catch {
-      return null
-    }
-  }
-  const safeDel = (k: string) => {
-    try {
-      local.removeItem(k)
-    } catch {
-      /* private window */
-    }
-  }
-
-  const open = async (): Promise<IDBDatabase> => {
-    const r = idb!.open(opts.name ?? DB_NAME, 1)
-    r.onupgradeneeded = () => {
-      if (!r.result.objectStoreNames.contains(STORE)) r.result.createObjectStore(STORE)
-    }
-    return req(r)
-  }
-  const put = async (key: string, value: string | null): Promise<void> => {
-    const tx = db!.transaction(STORE, 'readwrite')
-    if (value == null) tx.objectStore(STORE).delete(key)
-    else tx.objectStore(STORE).put(value, key)
-    await done(tx)
-  }
-  const read = async (key: string): Promise<string | null> => {
-    const v = await req(db!.transaction(STORE).objectStore(STORE).get(key))
-    return typeof v === 'string' ? v : null
-  }
-
-  /** The write to IndexedDB, in order. A failure keeps the value in localStorage if it fits, and is said out loud. */
-  const queue = (key: string, value: string | null) => {
-    waiting.set(key, value)
-    tail = tail.then(async () => {
-      if (!waiting.has(key) || waiting.get(key) !== value) return // a newer write of this key follows
-      try {
-        await put(key, value)
-        if (waiting.get(key) === value) waiting.delete(key)
-        safeDel(PENDING + key)
-        if (!stay.has(key)) safeDel(key)
-        opts.channel?.postMessage({ key })
-        failed.delete(key)
-      } catch (e) {
-        waiting.delete(key)
-        // Not lost: back to localStorage, as before this store existed.
-        try {
-          if (value == null) local.removeItem(key)
-          else local.setItem(key, value)
-          stay.add(key)
-          cache.delete(key)
-          failed.delete(key)
-          fail(`This device's bigger storage refused a write, so "${key}" is kept in the small one`, e)
-        } catch (e2) {
-          failed.set(key, new Error(`This device's storage is full (${String((e2 as Error)?.name ?? e2)})`))
-          fail(`"${key}" could not be stored on this device`, e2)
-        }
-      }
-    })
-  }
-
-  const ready = (async () => {
-    if (!idb) return
-    try {
-      db = await open()
-      const tx = db.transaction(STORE)
-      const [keys, values] = await Promise.all([req(tx.objectStore(STORE).getAllKeys()), req(tx.objectStore(STORE).getAll())])
-      keys.forEach((k, i) => {
-        if (typeof k === 'string' && typeof values[i] === 'string' && !touched.has(k)) cache.set(k, values[i])
-      })
-      mode = 'indexeddb'
-    } catch (e) {
-      db = null
-      fail('IndexedDB is not available here, so the sync copies stay in the small storage', e)
-      return
-    }
-    // A write that was on its way when the page closed last time.
-    const names: string[] = []
-    try {
-      for (let i = 0; i < local.length; i++) {
-        const k = local.key(i)
-        if (k) names.push(k)
-      }
-    } catch {
-      /* no listing: nothing to move */
-    }
-    for (const k of names) {
-      if (!k.startsWith(PENDING)) continue
-      const key = k.slice(PENDING.length)
-      const v = safeGet(k)
-      if (v != null && big(key) && !touched.has(key)) {
-        cache.set(key, v)
-        queue(key, v)
-      } else safeDel(k)
-    }
-    // Old copies still in localStorage: moved over, checked, and only then removed there.
-    for (const key of names) {
-      if (!big(key) || touched.has(key)) continue
-      const old = safeGet(key)
-      if (old == null) continue
-      try {
-        await put(key, old)
-        const back = await read(key)
-        if (back !== old) throw new Error('the copy read back is not the copy written')
-        if (!touched.has(key)) cache.set(key, old)
-        safeDel(key)
-      } catch (e) {
-        stay.add(key)
-        cache.delete(key)
-        fail(`"${key}" could not be moved to the bigger storage and stays where it was`, e)
-      }
-    }
-    await tail
-  })()
-
-  if (opts.channel) {
-    opts.channel.onmessage = (e) => {
-      const key = e?.data?.key
-      if (typeof key !== 'string' || !db || waiting.has(key)) return
-      void read(key).then((v) => {
-        if (waiting.has(key)) return
-        if (v == null) cache.delete(key)
-        else cache.set(key, v)
-      }, () => {})
-    }
-  }
-  // Leaving the page with a write still on its way: keep it where a closing page can (if it fits).
-  if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
-    window.addEventListener('pagehide', () => {
-      for (const [key, value] of waiting) {
-        if (value == null) continue
-        try {
-          local.setItem(PENDING + key, value)
-        } catch {
-          /* too big for the small storage: the IndexedDB write usually still finishes */
-        }
-      }
-    })
-  }
-
-  const inIdb = (key: string) => mode === 'indexeddb' && db != null && big(key) && !stay.has(key)
-
-  const store = {
-    ready,
-    getItem(key: string): string | null {
-      if (!big(key)) return local.getItem(key)
-      if (cache.has(key)) return cache.get(key)!
-      // Removed here, or never there. An old copy still in localStorage (not moved yet, or kept there) is read as it is.
-      return touched.has(key) && inIdb(key) ? null : safeGet(key)
-    },
-    setItem(key: string, value: string): void {
-      if (!big(key)) return local.setItem(key, value)
-      if (!inIdb(key) && !(idb && db == null && mode === 'localStorage' && !error)) {
-        // No IndexedDB: exactly as before (a full storage throws, as before).
-        local.setItem(key, value)
-        return
-      }
-      touched.add(key)
-      cache.set(key, String(value))
-      if (db) queue(key, String(value))
-      else
-        void ready.then(() => {
-          if (cache.get(key) !== String(value)) return
-          if (db) return queue(key, String(value))
-          // IndexedDB turned out not to be there: the small storage, as before.
-          cache.delete(key)
-          try {
-            local.setItem(key, String(value))
-          } catch (e) {
-            cache.set(key, String(value))
-            failed.set(key, new Error(`This device's storage is full (${String((e as Error)?.name ?? e)})`))
-            fail(`"${key}" could not be stored on this device`, e)
-          }
-        })
-    },
-    removeItem(key: string): void {
-      if (!big(key)) return local.removeItem(key)
-      touched.add(key)
-      cache.delete(key)
-      safeDel(key)
-      safeDel(PENDING + key)
-      if (db) queue(key, null)
-      else void ready.then(() => db && !cache.has(key) && queue(key, null), () => {})
-    },
-    clear: () => local.clear(),
-    key: (i: number) => local.key(i),
-    get length() {
-      return local.length
-    },
-    async flush(): Promise<void> {
-      await ready.catch(() => {})
-      await tail
-      const first = failed.values().next().value
-      if (first) throw first
-    },
-    status(): BigStoreStatus {
-      const keys: BigStoreStatus['keys'] = [...cache].map(([key, v]) => ({ key, chars: v.length, where: 'indexeddb' as const }))
-      try {
-        for (let i = 0; i < local.length; i++) {
-          const k = local.key(i)
-          if (k && big(k) && !cache.has(k)) keys.push({ key: k, chars: (safeGet(k) ?? '').length, where: 'localStorage' })
-        }
-      } catch {
-        /* no listing */
-      }
-      return { mode, error, keys }
-    }
-  }
-  return store as unknown as BigStore
+export interface BigStoreOptions {
+  local: Storage
+  idb?: IDBFactory | null
+  isBig?: (key: string) => boolean
+  /** Keys that move only after `moveIn()` and are merged, never replaced (default: Money's own data). */
+  isGated?: (key: string) => boolean
+  /** Two texts of one gated key into one (null: they can't be merged). Default: none. */
+  merge?: ((key: string, mine: string, theirs: string) => string | null) | null
+  name?: string
+  channel?: ChannelLike | null
+  onError?: (message: string) => void
+  /** The window that owns the store (default: this one; null: none, as in tests). */
+  win?: Window | null
+  /** How long to wait for IndexedDB to open before using localStorage (ms). */
+  openWait?: number
 }
 
+/** Money's own merge: the newest copy of each record wins, deletions stick (apps/finance/js/sync.js). */
+export const moneyMerge: (key: string, mine: string, theirs: string) => string | null = impl.moneyMerge(mergeLocal, normalizeState)
+
+export const createBigStore: (opts: BigStoreOptions) => BigStore = impl.createBigStore
+
 let host: BigStore | null | undefined
-/** This window's store for the sync's copies (null where there is no localStorage: the server). */
+let hostLocal: Storage | null = null
+/** This window's store (null where there is no localStorage: the server). */
 export function hostStore(): BigStore | null {
-  if (host !== undefined) return host
-  if (typeof localStorage === 'undefined') return (host = null)
+  const ls = typeof localStorage === 'undefined' ? null : localStorage
+  // One per window. (Only a test swaps the localStorage under it.)
+  if (host !== undefined && ls === hostLocal) return host
+  hostLocal = ls
+  if (!ls) return (host = null)
   let channel: ChannelLike | null = null
   try {
-    channel = typeof BroadcastChannel !== 'undefined' ? (new BroadcastChannel('life-big-store') as unknown as ChannelLike) : null
+    channel = typeof BroadcastChannel !== 'undefined' ? (new BroadcastChannel(impl.CHANNEL) as unknown as ChannelLike) : null
   } catch {
     channel = null
   }
-  host = createBigStore({
-    local: localStorage,
+  const root = createBigStore({
+    local: ls,
     channel,
+    merge: moneyMerge,
     onError: (message) => {
       if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new CustomEvent('life-big-store', { detail: { error: message } }))
     }
   })
-  // For the smoke test and for looking at it by hand in the console.
+  // This window hears the Money frame's changes, and the frame hears this window's.
+  host = typeof window !== 'undefined' && typeof window.addEventListener === 'function' ? root.forWindow(window) : root
+  // For the Money frame (it takes this store), the smoke test, and looking at it by hand in the console.
   if (typeof window !== 'undefined') (window as unknown as { __lifeStore?: BigStore }).__lifeStore = host
   return host
+}
+/** Money's own data as text, from wherever it lives on this device (null: none, or the server). */
+export const readMoney = (): string | null => {
+  try {
+    return hostStore()?.getItem(MONEY_KEY) ?? null
+  } catch {
+    return null
+  }
 }

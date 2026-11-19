@@ -27,7 +27,8 @@
       // Inside Life System (same-site frame): its look, unless picked otherwise.
       let inLife = false;
       try { inLife = window.parent !== window && window.parent.location.origin === location.origin; } catch {}
-      const st = JSON.parse(localStorage.getItem('finance-helper.state') || '{}')?.settings || {};
+      // The theme is kept in a small key of its own (the data itself is in IndexedDB, which can't be read this early).
+      const st = JSON.parse(localStorage.getItem('finance-helper.paint') || 'null') || JSON.parse(localStorage.getItem('finance-helper.state') || '{}')?.settings || {};
       const r = document.documentElement;
       if (inLife) { r.dataset.inLife = '1'; r.setAttribute('data-calm', ''); }
       let t = inLife ? st.themeInLife || 'life' : st.theme || JSON.parse(localStorage.getItem('finance-helper.head') || '{}')?.theme;

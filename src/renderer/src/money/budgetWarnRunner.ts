@@ -12,6 +12,7 @@ import { normalizeState } from '../../public/apps/finance/js/model.js'
 import './privacy' // loads the shared privacy state (hidden until Space)
 // @ts-ignore plain JS module from the embedded app
 import { budgetCrossings, newWarnings, thisMonthKeys, warningsOn, amountsHidden } from '../../public/apps/finance/js/budgetwarn.js'
+import { hostStore } from '../web/bigStore'
 
 /** This device's warnings already sent: { month, keys }. */
 export const SENT_KEY = 'life_budget_warned'
@@ -54,7 +55,7 @@ async function runOnce(): Promise<void> {
     const { life } = await import('../bridge')
     if (!life.notifications?.add) return
     let store: Storage | null = null
-    try { store = window.localStorage } catch { /* blocked */ }
+    try { store = hostStore() ?? window.localStorage } catch { /* blocked */ }
     await checkBudgetWarnings({
       store,
       add: (n) => life.notifications!.add!(n),

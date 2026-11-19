@@ -18,15 +18,15 @@ export async function moneyUsabilitySteps({ step, pg, open, financeFrame }) {
     return frame
   }
   const edit = (src) => pg.evaluate(([k, s]) => {
-    const st = JSON.parse(localStorage.getItem(k) || 'null')
+    const st = JSON.parse(moneyStore.getItem(k) || 'null')
     // eslint-disable-next-line no-new-func
     new Function('st', s)(st)
-    localStorage.setItem(k, JSON.stringify(st))
+    moneyStore.setItem(k, JSON.stringify(st))
   }, [KEY, src])
   const reloadFrame = async (ms = 3000) => { const f = await financeFrame(); await f.evaluate(() => location.reload()); await pg.waitForTimeout(ms); return financeFrame() }
-  const rec = (id) => pg.evaluate(([k, i]) => (JSON.parse(localStorage.getItem(k)).tx || []).find((t) => t.id === i) || null, [KEY, id])
+  const rec = (id) => pg.evaluate(([k, i]) => (JSON.parse(moneyStore.getItem(k)).tx || []).find((t) => t.id === i) || null, [KEY, id])
   const waitRec = (id, field, value, ms = 11000) => pg.waitForFunction(([k, i, f, v]) => {
-    const t = (JSON.parse(localStorage.getItem(k)).tx || []).find((x) => x.id === i)
+    const t = (JSON.parse(moneyStore.getItem(k)).tx || []).find((x) => x.id === i)
     return !!t && t[f] === v
   }, [KEY, id, field, value], { timeout: ms })
   const press = async (...keys) => { for (const k of keys) { await pg.keyboard.press(k); await pg.waitForTimeout(160) } }
@@ -40,7 +40,7 @@ export async function moneyUsabilitySteps({ step, pg, open, financeFrame }) {
 
   await step('Money usability: Ctrl+Z and Recent actions, saved views, and the Log edited like a spreadsheet', async () => {
     await openFinance()
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await edit(`
       const d = new Date(); const ym = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); const iso = ym + '-' + String(d.getDate()).padStart(2, '0');
       st.tx = st.tx.filter((t) => !String(t.id).startsWith('smoke-u-'));
@@ -195,16 +195,16 @@ export async function moneyUsabilitySteps({ step, pg, open, financeFrame }) {
       await press('Escape')
       await clip(frame, 'paste', '111\n222')
       await pg.waitForFunction(([k, m]) => {
-        const inc = (JSON.parse(localStorage.getItem(k)).tx || []).filter((t) => t.type === 'income' && (t.date === `${m}-01` || t.date === `${m}-02`) && [11100, 22200].includes(t.amount))
+        const inc = (JSON.parse(moneyStore.getItem(k)).tx || []).filter((t) => t.type === 'income' && (t.date === `${m}-01` || t.date === `${m}-02`) && [11100, 22200].includes(t.amount))
         return inc.length === 2
       }, [KEY, ym], { timeout: 14000 })
       await press('Control+z')
-      await pg.waitForFunction(([k, m]) => !(JSON.parse(localStorage.getItem(k)).tx || []).some((t) => t.type === 'income' && (t.date === `${m}-01` || t.date === `${m}-02`) && [11100, 22200].includes(t.amount)), [KEY, ym], { timeout: 11000 })
+      await pg.waitForFunction(([k, m]) => !(JSON.parse(moneyStore.getItem(k)).tx || []).some((t) => t.type === 'income' && (t.date === `${m}-01` || t.date === `${m}-02`) && [11100, 22200].includes(t.amount)), [KEY, ym], { timeout: 11000 })
     } catch (e) {
       throw new Error(`part ${at}: ${e.message}`)
     } finally {
       if (original != null) {
-        await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+        await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
         const f = await financeFrame()
         await f.evaluate(() => { location.hash = '#home'; location.reload() })
         await pg.waitForTimeout(1700)

@@ -1721,7 +1721,7 @@
     "SMOKE_ONLY=\"Data center|Money hub\" npm run smoke"
    ],
    "evidence": "2026-11-18: tsc clean; full vitest green (12 new tests: coalescing, the version chain, a merge after coalescing, one export per change, undo after a failed disk save, set-aside by size and by 413, merge skip with the server still asked).",
-   "notes": "NOT done: Finance Helper's own data (finance-helper.state) is still in localStorage (about 20,000 records fit); design in DECISIONS.md. core/settingParts.ts, web/chunkedTurso.ts, web/bigStore.ts, migration 025. mirror.ts (writeDesktop, flushDesktop, stuckWrites, retryStuck), desktopSync.ts (snapshotTable, diffFrom, undoRows, settingKeysOf, requestBytes), browserDb.ts onTouch, appSync.ts compareKey, core/textHash.ts, SyncPanel.tsx. Rules: docs/DECISIONS.md \"Desktop waiting changes\"."
+   "notes": "Finance Helper's own data moved the same day: see money-own-data-indexeddb. core/settingParts.ts, web/chunkedTurso.ts, web/bigStore.ts, migration 025. mirror.ts (writeDesktop, flushDesktop, stuckWrites, retryStuck), desktopSync.ts (snapshotTable, diffFrom, undoRows, settingKeysOf, requestBytes), browserDb.ts onTouch, appSync.ts compareKey, core/textHash.ts, SyncPanel.tsx. Rules: docs/DECISIONS.md \"Desktop waiting changes\"."
   },
   {
    "id": "F-OFFLINE-TWO-DEVICES",
@@ -1737,6 +1737,22 @@
    ],
    "evidence": "2026-11-18: the unit tests and the 6 Offline smoke steps pass (website and desktop mode, both reconnect orders); the whole suite also ran with the clock in 2028 (two food test files pinned)",
    "notes": "Known limit: on the website a payment refused because another device took its ledger number stays in the could-not-sync list in Settings (the night and the must-dos of that batch are sent on their own). The offline steps start their own made-up servers."
+  },
+  {
+   "id": "money-own-data-indexeddb",
+   "priority": 1,
+   "area": "data-sync",
+   "title": "Money's own data is kept in IndexedDB, not in the 5 million characters of localStorage",
+   "user_visible_behavior": "Money no longer stops at about 20,000 records. The first time Money is opened after the update its data moves to the browser's bigger storage: written, read back, compared, and only then removed from the old place. If that storage is not available Money keeps working from the old place and Data center → Space → \"Money on this device\" says so and why. Bots, the Money hub, backups, restore, export and import, the Data center and the change history all read the new place. The website's changes waiting for a connection are kept there too, so a waiting Money change no longer has to fit the small storage.",
+   "status": "passing",
+   "verification": [
+    "npx vitest run src/renderer/src/web/moneyStore.test.ts src/renderer/src/web/bigStore.test.ts src/renderer/src/web/syncDataLoss.test.ts",
+    "PERF=1 npx vitest run src/renderer/src/web/moneyScale.perf.test.ts",
+    "SMOKE_SET=release node e2e/smoke.mjs",
+    "SMOKE_ONLY=\"Money|Finance|Data center|Offline|Long pages\" npm run smoke"
+   ],
+   "evidence": "2026-11-18: 25 new unit tests (move, verify before delete, interrupted, fallback, merge instead of replace, two windows, events, closing page, readers, backup and restore round trip, offline queue); tsc clean; full vitest and full smoke green; perf table at 40,000 records.",
+   "notes": "One store, plain JS, shared by Life and Finance Helper: public/apps/finance/js/bigstore.js; web/bigStore.ts types it (hostStore). Finance: store.js deviceStorage/storeReady, app.js awaits it before load(). Smoke steps use moneyStore (the window's store). Rules not to undo: docs/DECISIONS.md \"Money's own data lives in IndexedDB, behind one store per window\". sw cache v74."
   }
  ]
 }

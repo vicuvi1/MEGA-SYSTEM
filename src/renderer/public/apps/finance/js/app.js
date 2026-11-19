@@ -1,7 +1,7 @@
 // The app: screens, the add/edit sheet, import and backup. All numbers come
 // from model.js; this file only turns them into HTML and handles taps.
 
-import { load, saveSoon, flushSave, hasPendingSave, onSaved, backupText, restoreJSON, requestPersistence, isSealed, openImported, wipeStore, hasSession, reopen, STORAGE_KEYS } from './store.js';
+import { load, saveSoon, flushSave, hasPendingSave, onSaved, backupText, restoreJSON, requestPersistence, isSealed, openImported, wipeStore, hasSession, reopen, storeReady, STORAGE_KEYS } from './store.js';
 import * as M from './model.js';
 import * as T from './cattree.js';
 import * as Cats from './screens/categories.js';
@@ -100,6 +100,8 @@ import { APP_VERSION } from './version.js';
 import { countsAsSpending, countsAsIncome, signed, isRefund, isNotCounted } from './catshare.js';
 import * as E from './everyday.js';
 
+// The data lives in IndexedDB: open it (and move an old copy out of localStorage) before the first read.
+await storeReady();
 let state = load();
 // Undo / redo for this session (js/history.js).
 const history = createHistory();
@@ -4003,7 +4005,7 @@ window.addEventListener('storage', (e) => {
   }
 });
 
-window.addEventListener('fh-save-failed', () => toast('Could not save the encrypted data. Make a backup and run "Check everything".'));
+window.addEventListener('fh-save-failed', () => toast('Could not save on this device. Make a backup now and run "Check everything".'));
 
 window.addEventListener('beforeinstallprompt', (e) => {
   e.preventDefault();

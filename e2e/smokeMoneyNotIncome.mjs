@@ -15,15 +15,15 @@ export async function moneyNotIncomeSteps({ step, pg, open, financeFrame }) {
         await pg.waitForTimeout(800)
         frame = await financeFrame().catch((e) => { if (Date.now() > end) throw e; return null })
       }
-      const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+      const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
       await pg.evaluate((k) => {
-        const st = JSON.parse(localStorage.getItem(k) || 'null')
+        const st = JSON.parse(moneyStore.getItem(k) || 'null')
         const d = new Date()
         const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
         st.tx = st.tx.filter((t) => !String(t.id).startsWith('smoke-ni-'))
         const acc = (st.settings.accounts.find((a) => a.id === 'wallet') || st.settings.accounts[0]).id
         st.tx.push({ id: 'smoke-ni-1', type: 'income', amount: 77700, currency: st.settings.currency || 'MDL', rate: 1, base: 77700, date: iso, account: acc, category: 'other-in', note: '', createdAt: Date.now(), updatedAt: Date.now() })
-        localStorage.setItem(k, JSON.stringify(st))
+        moneyStore.setItem(k, JSON.stringify(st))
       }, KEY)
       frame = await financeFrame()
       await frame.evaluate(() => location.reload())
@@ -33,7 +33,7 @@ export async function moneyNotIncomeSteps({ step, pg, open, financeFrame }) {
         const month = await frame.evaluate(() => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` })
         const read = () => frame.evaluate(async (m) => {
           const M = await import(new URL('./js/model.js', location.href).href)
-          const st = M.normalizeState(JSON.parse(localStorage.getItem('finance-helper.state')))
+          const st = M.normalizeState(JSON.parse(moneyStore.getItem('finance-helper.state')))
           const s = M.monthSummary(st, m)
           const t = st.tx.find((x) => x.id === 'smoke-ni-1')
           return { income: s.income, bal: JSON.stringify(M.accountBalances(st)), flag: t?.notIncome === true }
@@ -47,17 +47,17 @@ export async function moneyNotIncomeSteps({ step, pg, open, financeFrame }) {
         if (!(await row.count())) throw new Error('the seeded record is not in the suggestions')
         if ((await read()).flag) throw new Error('the record was changed before confirming')
         await row.locator('[data-ni="mark"]').click()
-        await frame.waitForFunction(() => { const st = JSON.parse(localStorage.getItem('finance-helper.state')); return st.tx.find((x) => x.id === 'smoke-ni-1')?.notIncome === true }, null, { timeout: 6000 })
+        await frame.waitForFunction(() => { const st = JSON.parse(moneyStore.getItem('finance-helper.state')); return st.tx.find((x) => x.id === 'smoke-ni-1')?.notIncome === true }, null, { timeout: 6000 })
         const after = await read()
         if (after.income !== before.income - 77700) throw new Error(`Earned did not drop by 777: ${before.income} -> ${after.income}`)
         if (after.bal !== before.bal) throw new Error('the account balances changed')
         await frame.evaluate(() => document.querySelector('#toast button')?.click())
-        await frame.waitForFunction(() => { const st = JSON.parse(localStorage.getItem('finance-helper.state')); return st.tx.find((x) => x.id === 'smoke-ni-1')?.notIncome !== true }, null, { timeout: 6000 })
+        await frame.waitForFunction(() => { const st = JSON.parse(moneyStore.getItem('finance-helper.state')); return st.tx.find((x) => x.id === 'smoke-ni-1')?.notIncome !== true }, null, { timeout: 6000 })
         const undone = await read()
         if (undone.income !== before.income) throw new Error(`Undo did not bring Earned back: ${undone.income}`)
       } finally {
         if (original != null) {
-          await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+          await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
           const f = await financeFrame()
           await f.evaluate(() => location.reload())
           await pg.waitForTimeout(1500)

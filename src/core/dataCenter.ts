@@ -111,6 +111,45 @@ export function dataNotice(backupRed: string[], warnings: Meter[]): { title: str
   return { title: w.level === 'red' ? 'Life System: your data is nearly out of room' : 'Life System: your data is filling up', body: `${warningLine(w)}. Open the Data center.` }
 }
 
+// ---------- Money's own data on this device ----------
+
+/** What the device store reports (renderer/src/web/bigStore.ts `status()`). */
+export interface DeviceStoreStatus {
+  mode: 'indexeddb' | 'localStorage'
+  error: string | null
+  keys: { key: string; chars: number; where: 'indexeddb' | 'localStorage' }[]
+  moneyMoved: boolean
+}
+/** Money's own data: plain, and sealed while Money is locked with its PIN. */
+const MONEY_KEYS = ['finance-helper.state', 'finance-helper.enc']
+
+/** Where Money's own data is on this device (null: no Money here). */
+export function moneyWhere(big: DeviceStoreStatus): 'indexeddb' | 'localStorage' | null {
+  const keys = big.keys.filter((k) => MONEY_KEYS.includes(k.key))
+  return !keys.length ? null : keys.every((k) => k.where === 'indexeddb') ? 'indexeddb' : 'localStorage'
+}
+/**
+ * Money's own data on this device, as one line. In IndexedDB it has no limit of its own (the
+ * browser's storage bar covers it). Still in localStorage, it is part of the app storage bar
+ * and its 5 million characters, and the line says honestly why it has not moved.
+ */
+export function moneyMeter(big: DeviceStoreStatus): Meter | null {
+  const where = moneyWhere(big)
+  if (!where) return null
+  const keys = big.keys.filter((k) => MONEY_KEYS.includes(k.key))
+  const used = keys.reduce((n, k) => n + k.chars, 0)
+  const lock = keys.some((k) => k.key === MONEY_KEYS[1]) && !keys.some((k) => k.key === MONEY_KEYS[0]) ? ' Locked with the Money PIN.' : ''
+  const line = (place: string, note: string) => meter({ id: 'money', label: 'Money on this device', where: place, used, limit: null, warnAt: null, redAt: null, unit: 'chars', note: `${note}${lock}` })
+  if (where === 'indexeddb') return line('This device (IndexedDB): your Money records, out of the small app storage', `No 5 million character limit here; the browser's storage bar is the one that counts.${big.error ? ` ${big.error}` : ''}`)
+  const why =
+    big.mode !== 'indexeddb'
+      ? `IndexedDB is not available in this window, so Money stays in the small app storage and that limit applies (about 20,000 records).${big.error ? ` ${big.error}` : ''}`
+      : !big.moneyMoved
+        ? 'It moves to IndexedDB (no 5 million character limit) the first time Money is opened on this device with this version. Until then it is kept exactly as before.'
+        : `Money could not be moved to IndexedDB, so it stays in the small app storage and that limit applies (about 20,000 records). ${big.error ?? 'It is tried again on the next start.'}`
+  return line('This device (localStorage): part of the app storage bar', why)
+}
+
 // ---------- localStorage by key ----------
 
 export interface KeySize {

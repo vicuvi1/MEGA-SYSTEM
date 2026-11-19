@@ -21,12 +21,12 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
   }
   // Put made-up data into the stored copy, then reload Finance Helper so it reads it.
   const seed = async (edit) => {
-    const original = await pg.evaluate((k) => localStorage.getItem(k), KEY)
+    const original = await pg.evaluate((k) => moneyStore.getItem(k), KEY)
     await pg.evaluate(([k, src]) => {
-      const st = JSON.parse(localStorage.getItem(k) || 'null')
+      const st = JSON.parse(moneyStore.getItem(k) || 'null')
       // eslint-disable-next-line no-new-func
       new Function('st', src)(st)
-      localStorage.setItem(k, JSON.stringify(st))
+      moneyStore.setItem(k, JSON.stringify(st))
     }, [KEY, edit])
     const frame = await financeFrame()
     await frame.evaluate(() => location.reload())
@@ -35,14 +35,14 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
   }
   const restore = async (original) => {
     if (original == null) return
-    await pg.evaluate(([k, v]) => localStorage.setItem(k, v), [KEY, original])
+    await pg.evaluate(([k, v]) => moneyStore.setItem(k, v), [KEY, original])
     const frame = await financeFrame()
     await frame.evaluate(() => location.reload())
     await pg.waitForTimeout(1500)
   }
   const model = (frame, fn, arg) => frame.evaluate(async ([src, a]) => {
     const M = await import(new URL('./js/model.js', location.href).href)
-    const st = JSON.parse(localStorage.getItem('finance-helper.state'))
+    const st = JSON.parse(moneyStore.getItem('finance-helper.state'))
     // eslint-disable-next-line no-new-func
     return new Function('M', 'st', 'a', src)(M, M.normalizeState(st), a)
   }, [fn, arg])
@@ -81,8 +81,8 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
         await pg.screenshot({ path: `${shots}/money-b1-refund-sheet.png` })
       }
       await frame.click('.sheet button[type="submit"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k) || '{"tx":[]}').tx.some((t) => t.refund === true && t.note === 'smoke refund headphones'), KEY, { timeout: 6000 })
-      const rec = await pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).tx.find((t) => t.note === 'smoke refund headphones'), KEY)
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k) || '{"tx":[]}').tx.some((t) => t.refund === true && t.note === 'smoke refund headphones'), KEY, { timeout: 6000 })
+      const rec = await pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).tx.find((t) => t.note === 'smoke refund headphones'), KEY)
       if (rec.type !== 'income' || rec.category !== 'tech' || rec.amount !== 30000) throw new Error(`refund record: ${JSON.stringify(rec)}`)
       const after = await read()
       if (after.expense !== before.expense - 30000) throw new Error(`month spent ${before.expense} -> ${after.expense} (want -30000)`)
@@ -92,7 +92,7 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
       if (after.bal[accId] !== before.bal[accId] + 30000) throw new Error('the account balance did not go up by 300')
       // Undo takes it back out.
       await clickToast(frame)
-      await pg.waitForFunction((k) => !JSON.parse(localStorage.getItem(k) || '{"tx":[]}').tx.some((t) => t.note === 'smoke refund headphones'), KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => !JSON.parse(moneyStore.getItem(k) || '{"tx":[]}').tx.some((t) => t.note === 'smoke refund headphones'), KEY, { timeout: 6000 })
       const back = await read()
       if (back.expense !== before.expense || back.income !== before.income) throw new Error('Undo did not restore the totals')
     } finally {
@@ -127,14 +127,14 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
         await pg.waitForTimeout(500)
         await pg.screenshot({ path: `${shots}/money-b1-goals-warning.png` })
       }
-      const amountOf = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount, KEY)
+      const amountOf = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount, KEY)
       await lower.first().click()
-      await pg.waitForFunction((k) => (JSON.parse(localStorage.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount || 0) < 99999999, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => (JSON.parse(moneyStore.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount || 0) < 99999999, KEY, { timeout: 6000 })
       const lowered = await amountOf()
       if (!(lowered > 0)) throw new Error(`the reservation was released or zeroed (${lowered})`)
       await frame.waitForFunction(() => !document.querySelector('[data-testid="goal-short"]'), null, { timeout: 5000 })
       await clickToast(frame)
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount === 99999999, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).goalAllocations.find((a) => a.id === 'smoke-b1-ga')?.amount === 99999999, KEY, { timeout: 6000 })
     } finally {
       await restore(original)
     }
@@ -155,7 +155,7 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
       if (!/^rate from \d{1,2} [A-Z][a-z]{2}$/.test((await frame.locator('[data-testid="rate-date"]').first().innerText()).trim())) throw new Error('the rate date is not shown as "rate from 12 Nov"')
       const chip = (await frame.locator('[data-testid="rate-stale"]').first().innerText()).replace(/\s+/g, ' ')
       if (!/6 days old/.test(chip) || !/Update rates|offline/.test(chip)) throw new Error(`stale chip: ${chip}`)
-      const stored = await pg.evaluate((k) => JSON.stringify(JSON.parse(localStorage.getItem(k)).tx), KEY)
+      const stored = await pg.evaluate((k) => JSON.stringify(JSON.parse(moneyStore.getItem(k)).tx), KEY)
       if (!stored) throw new Error('no records')
       await restore(original)
       original = await seed(seedRates(1))
@@ -188,13 +188,13 @@ export async function moneyB1Steps({ step, pg, open, financeFrame }) {
       const mine = groups.filter((g) => /smoke dup lunch/i.test(g))
       if (mine.length !== 1) throw new Error(`the seeded pair is in ${mine.length} groups`)
       if (groups.some((g) => /smoke skip taxi/i.test(g))) throw new Error('a "not a duplicate" pair is listed')
-      const ids = () => pg.evaluate((k) => JSON.parse(localStorage.getItem(k)).tx.map((t) => t.id).filter((i) => i.startsWith('smoke-b1-d')), KEY)
+      const ids = () => pg.evaluate((k) => JSON.parse(moneyStore.getItem(k)).tx.map((t) => t.id).filter((i) => i.startsWith('smoke-b1-d')), KEY)
       await frame.click('.sheet [data-testid="dupes-remove"]')
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b1-d')).length === 1, KEY, { timeout: 12000 }).catch(async () => {
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b1-d')).length === 1, KEY, { timeout: 12000 }).catch(async () => {
         throw new Error(`the pair was not reduced to one (${JSON.stringify(await ids())}; toast: ${await frame.locator('#toast').innerText().catch(() => '')})`)
       })
       await clickToast(frame)
-      await pg.waitForFunction((k) => JSON.parse(localStorage.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b1-d')).length === 2, KEY, { timeout: 6000 })
+      await pg.waitForFunction((k) => JSON.parse(moneyStore.getItem(k)).tx.filter((t) => t.id.startsWith('smoke-b1-d')).length === 2, KEY, { timeout: 6000 })
     } finally {
       await restore(original)
     }

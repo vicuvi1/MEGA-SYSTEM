@@ -14,11 +14,12 @@ import { noteMoment } from './benMind'
 import { loadArc, loadIdentity, loadSeasons, loadSide, loadWheel, loadWins, sagaView, saveArc, saveIdentity, saveSeasons, saveSide, saveVision, saveVisionPhoto, saveWheel, saveWins, type SideFacts } from './sagaStore'
 import { createLadder } from './ladderApi'
 import type { Services, WebServices } from './webServices'
+import { hostStore } from './bigStore'
 
 const uid = (p: string) => `${p}${Date.now().toString(36)}${Math.floor(Math.random() * 1296).toString(36)}`
 
 export function createSaga(svcP: Promise<WebServices>) {
-  const fin = (s: Services) => financeStateFrom(s.db, typeof localStorage !== 'undefined' ? localStorage : null)
+  const fin = (s: Services) => financeStateFrom(s.db, hostStore())
   const read = async <T>(fn: (s: Services) => T) => (await svcP).read(fn)
   const write = async <T>(fn: (s: Services) => T) => (await svcP).write(fn, 'life-saga-changed')
   const today = (s: Services) => s.wallet.today()

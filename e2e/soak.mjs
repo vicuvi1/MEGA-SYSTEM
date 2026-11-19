@@ -102,7 +102,7 @@ const metrics = async () => {
   const m = Object.fromEntries((await cdp.send('Performance.getMetrics')).metrics.map((x) => [x.name, x.value]))
   return { at: await pageNow(), heap: m.JSHeapUsedSize, nodes: m.Nodes, listeners: m.JSEventListeners }
 }
-const outbox = () => pg.evaluate(() => JSON.parse(localStorage.getItem('life_offline_writes') || '[]').length)
+const outbox = () => pg.evaluate(() => JSON.parse((window.__lifeStore ?? localStorage).getItem('life_offline_writes') || '[]').length)
 const calls = async () => {
   const s = await control('stats')
   return Object.values(s.calls ?? {}).reduce((a, b) => a + b, 0)

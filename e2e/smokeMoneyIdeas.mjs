@@ -51,7 +51,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
       const N = key(now.getFullYear(), now.getMonth() + 1)
       const dim = (k) => new Date(Number(k.slice(0, 4)), Number(k.slice(5)), 0).getDate()
       const today = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
-      const raw = localStorage.getItem(KEY)
+      const raw = moneyStore.getItem(KEY)
       const base = JSON.parse(raw)
       const t = (id, date, amount, extra = {}) => ({ id, type: 'expense', amount, currency: 'MDL', rate: 1, base: amount, date, category: 'food', account: 'card', note: '', createdAt: 1, updatedAt: 1, ...extra })
       const rule = (id, type, amount, note, every, start, lastDone) => ({ id, type, amount, currency: 'MDL', account: 'card', category: type === 'income' ? 'work' : 'home', note, every, start, ...(lastDone ? { lastDone } : {}), createdAt: 1, updatedAt: 1 })
@@ -75,7 +75,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
         ],
         goals: [...(base.goals || []), { id: `mg-1-${tag}`, name: 'Laptop', emoji: '💻', target: 3000000, account: 'manual', saved: 0, history: [{ date: tenAgo, amount: 300000 }], deadline: null, doneAt: null, updatedAt: 1 }],
       }
-      localStorage.setItem(KEY, JSON.stringify(next))
+      moneyStore.setItem(KEY, JSON.stringify(next))
       return { raw, P, N, daysP: dim(P), daysN: dim(N), today }
     }
     // The app may still write its own copy back (a save or sync landing after the seed) and wipe it: check the seed
@@ -127,7 +127,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     // The rent on the 20th takes 1 500 off the line, the salary on the 28th adds 4 000.
     // The made-up data has its own monthly bills whose day depends on the clock (Internet starts on the 20th when the
     // run's clock says the 18th): those land on the same day, so they count too.
-    const others = await frame.evaluate((tagId) => JSON.parse(localStorage.getItem('finance-helper.state')).recurring
+    const others = await frame.evaluate((tagId) => JSON.parse(moneyStore.getItem('finance-helper.state')).recurring
       .filter((r) => !r.id.endsWith(tagId) && r.every === 'month' && r.type === 'expense' && String(r.start).slice(8) === '20')
       .reduce((s, r) => s + r.amount, 0), tag)
     const want20 = l19 - 150000 - others
@@ -144,11 +144,11 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     if (!(await frame.locator(`[data-testid="mc-day"][data-date="${N}-28"] .mc-inc`).count())) throw new Error('no salary on the 28th')
     await shot(frame.locator('main#app'), 'money-ideas-calendar-next')
     // The floor is a setting kept with the data.
-    await pg.waitForFunction(([KEY, v]) => JSON.parse(localStorage.getItem(KEY) || '{}').settings?.moneyFloor === v, [KEY, l19 - 149900], { timeout: 8000 }).catch(() => { throw new Error('the floor was not kept with the data') })
+    await pg.waitForFunction(([KEY, v]) => JSON.parse(moneyStore.getItem(KEY) || '{}').settings?.moneyFloor === v, [KEY, l19 - 149900], { timeout: 8000 }).catch(() => { throw new Error('the floor was not kept with the data') })
     // Back to a floor of 0 for the steps after.
     await frame.fill('#mc-floor', '')
     await frame.press('#mc-floor', 'Tab')
-    await pg.waitForFunction((KEY) => !JSON.parse(localStorage.getItem(KEY) || '{}').settings?.moneyFloor, KEY, { timeout: 8000 })
+    await pg.waitForFunction((KEY) => !JSON.parse(moneyStore.getItem(KEY) || '{}').settings?.moneyFloor, KEY, { timeout: 8000 })
   })
 
   await step('Money afford: a price shows safe to spend before and after, goal delay and a verdict, and creates nothing', async () => {
@@ -178,7 +178,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     // "Add to wishlist instead" puts it on the list, still no record.
     await frame.fill('#af-name', 'Headphones')
     await frame.click('#af-wish')
-    await frame.waitForFunction((KEY) => (JSON.parse(localStorage.getItem(KEY) || '{}').settings?.wishlist || []).some((w) => w.name === 'Headphones' && w.price === 100000), KEY, { timeout: 5000 }).catch(async () => { throw new Error(`not on the wishlist: ${await pg.evaluate((KEY) => JSON.stringify(JSON.parse(localStorage.getItem(KEY) || '{}').settings?.wishlist), KEY)} verdictText=${await frame.locator('[data-testid="afford-verdict"]').innerText().catch(() => '')}`) })
+    await frame.waitForFunction((KEY) => (JSON.parse(moneyStore.getItem(KEY) || '{}').settings?.wishlist || []).some((w) => w.name === 'Headphones' && w.price === 100000), KEY, { timeout: 5000 }).catch(async () => { throw new Error(`not on the wishlist: ${await pg.evaluate((KEY) => JSON.stringify(JSON.parse(moneyStore.getItem(KEY) || '{}').settings?.wishlist), KEY)} verdictText=${await frame.locator('[data-testid="afford-verdict"]').innerText().catch(() => '')}`) })
     if (JSON.stringify(await storedTx()) !== before) throw new Error('adding to the wishlist created a record')
   })
 
@@ -208,12 +208,12 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     // Days later (a fixed 8 days after they were added): ready, "Still want it?".
     await pg.waitForTimeout(1500)
     await frame.evaluate((KEY) => {
-      const s = JSON.parse(localStorage.getItem(KEY))
+      const s = JSON.parse(moneyStore.getItem(KEY))
       const d = new Date(Date.now() - 8 * 864e5)
       const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
       for (const w of s.settings.wishlist) if (w.name !== 'Headphones') w.added = iso
       s.settings.updatedAt = Date.now()
-      localStorage.setItem(KEY, JSON.stringify(s))
+      moneyStore.setItem(KEY, JSON.stringify(s))
     }, KEY)
     frame = await reloadFrame()
     await frame.evaluate(() => { location.hash = '#wishlist' })
@@ -244,7 +244,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
     const frame = await financeFrame()
     await pg.waitForTimeout(1500)
     await frame.evaluate(([KEY, settings, tag]) => {
-      const s = JSON.parse(localStorage.getItem(KEY))
+      const s = JSON.parse(moneyStore.getItem(KEY))
       const mine = (x) => x.id.endsWith(`-${tag}`)
       s.deleted = { ...(s.deleted || {}) }
       for (const x of [...s.tx, ...(s.recurring || []), ...(s.goals || [])].filter(mine)) s.deleted[x.id] = Date.now()
@@ -253,7 +253,7 @@ export async function moneyIdeasSteps({ step, pg, open, financeFrame, storedTx }
       s.goals = (s.goals || []).filter((x) => !mine(x))
       for (const k of ['wishlist', 'wishlistDays', 'moneyFloor']) { if (k in settings) s.settings[k] = settings[k]; else delete s.settings[k] }
       s.settings.updatedAt = Date.now()
-      localStorage.setItem(KEY, JSON.stringify(s))
+      moneyStore.setItem(KEY, JSON.stringify(s))
     }, [KEY, original, tag])
     await reloadFrame()
     const left = (await storedTx()).filter((x) => x.id.endsWith(`-${tag}`)).length

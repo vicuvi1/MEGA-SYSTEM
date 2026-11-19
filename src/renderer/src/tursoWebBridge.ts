@@ -309,7 +309,8 @@ export function createTursoWebBridge(): Bridge {
   if (window.desktop) void window.desktop.load().then((bytes) => { if (bytes) haveSession() })
 
   // Starts loading at once; every call below waits for it.
-  const mirrorP: Promise<Mirror> = Promise.all([initSqlJs({ locateFile: () => sqlWasmUrl }), sessionReady]).then(
+  // Money's data and the waiting changes are loaded from IndexedDB first (web/bigStore.ts), so nothing below reads them as empty.
+  const mirrorP: Promise<Mirror> = Promise.all([initSqlJs({ locateFile: () => sqlWasmUrl }), sessionReady, store?.ready.catch(() => {})]).then(
     ([SQL]) => new Mirror(SQL, turso, window.desktop ? { load: () => window.desktop!.load(), save: (bytes) => window.desktop!.save(bytes) } : typeof indexedDB !== 'undefined' ? indexedDbStore() : null, !!window.desktop)
   )
   const svcP: Promise<WebServices> = mirrorP.then((m) => createWebServices(m))
@@ -366,7 +367,7 @@ export function createTursoWebBridge(): Bridge {
   }
   // Telegram expenses waiting for Finance Helper on this device.
   const financeP = mirrorP.then((m) => {
-    const inbox = createFinanceInbox(m)
+    const inbox = createFinanceInbox(m, store)
     void inbox.apply().catch(() => 0)
     return inbox
   })
@@ -1156,7 +1157,7 @@ export function createTursoWebBridge(): Bridge {
           return next
         }),
       // Ben's desk (read here, instant; changes sync like everything else).
-      desk: async () => (await svcP).read((s) => deskView(s as any, financeStateFrom((s as any).db, localStorage))),
+      desk: async () => (await svcP).read((s) => deskView(s as any, financeStateFrom((s as any).db, store))),
       deskDo: async (op: DeskOp) => {
         const line = await (await svcP).write((s) => deskChange(s as any, op))
         void syncNow().catch(() => null)
@@ -1408,7 +1409,7 @@ export function createTursoWebBridge(): Bridge {
     // LF1, LF4–LF7, LF12, LF15, LF18: seasons, vision, identity, side quests, wins, life wheel, Ben's arc.
     saga: createSaga(svcP),
     // Career: job board, portfolio, flashcards, essays, the shift study kit, the money plan, letters.
-    career: createCareer(svcP, (db) => financeStateFrom(db, typeof localStorage !== 'undefined' ? localStorage : null), serverAi(currentSession)),
+    career: createCareer(svcP, (db) => financeStateFrom(db, store), serverAi(currentSession)),
     // The Money hub and one-line quick add (Finance Helper's data).
     finance: createMoneyApi(svcP, () => syncsP.then((list) => list.find((x) => x.spec === FINANCE)?.sync()), applyFinance),
     // Money phase 5: To sort, bills due to confirm, category rules.
@@ -2317,7 +2318,12 @@ export function createTursoWebBridge(): Bridge {
         const marked = markRestoredApps(snap, restoreId, now, Object.fromEntries(Object.entries(restoreSpecs).map(([f, sp]) => [f, sp.share ?? ((x: any) => x)])))
         // Staging tables, then one transaction in foreign-key order: all or nothing, any size.
         await runRestorePlan(restorePlan(marked.snap, shape.columns, restoreId, { refs: shape.refs }), (st) => turso.writeAtomic(st as any))
-        if (store) putBackApps(store, snap, marked.apps, restoreId, now, restoreSpecs)
+        if (store) {
+          putBackApps(store, snap, marked.apps, restoreId, now, restoreSpecs)
+          // Money's data is in IndexedDB: wait until it is really there. If this device can't store it,
+          // the store says so (Data center) and the next sync takes the restored copy from the server.
+          await store.flush().catch(() => {})
+        }
         await mirror.refresh()
         for (const n of ['life-wallet-changed', 'life-discipline-changed', 'life-body-changed', ...Object.values(APP_SPECS).map((sp) => sp.event)]) window.dispatchEvent(new CustomEvent(n, { detail: { fromSync: true } }))
         return true

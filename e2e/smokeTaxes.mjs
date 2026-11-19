@@ -34,7 +34,7 @@ export async function taxSteps({ step, pg, open, financeFrame, storedTx }) {
     })
     if (!pick.inc || pick.costs.length < 2) throw new Error(`not enough records this year to tag (${JSON.stringify(pick)})`)
     const tagOf = async (id) => (await storedTx()).find((t) => t.id === id)?.tax
-    const waitTag = (id, tag) => pg.waitForFunction(([id, tag]) => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id)?.tax === tag, [id, tag], { timeout: 6000 })
+    const waitTag = (id, tag) => pg.waitForFunction(([id, tag]) => JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id)?.tax === tag, [id, tag], { timeout: 6000 })
     // One record: its own select.
     await frame.selectOption(`[data-taxone="${pick.inc}"]`, 'taxable')
     await waitTag(pick.inc, 'taxable').catch(async () => { throw new Error(`the income record was not tagged (${await tagOf(pick.inc)})`) })
@@ -81,7 +81,7 @@ export async function taxSteps({ step, pg, open, financeFrame, storedTx }) {
     for (const id of [pick.inc, ...pick.costs]) {
       if (!(await frame.$(`[data-taxone="${id}"]`))) await frame.click('[data-act="tax-filter"][data-f="all"]')
       await frame.selectOption(`[data-taxone="${id}"]`, 'auto')
-      await pg.waitForFunction((id) => !('tax' in (JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id) || {})), id, { timeout: 6000 })
+      await pg.waitForFunction((id) => !('tax' in (JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id) || {})), id, { timeout: 6000 })
     }
     // 4. A receipt on a cost, from its edit sheet: Life keeps it on this device (Drive is not
     // connected here), the record holds only its id, and editing the record keeps it.
@@ -95,13 +95,13 @@ export async function taxSteps({ step, pg, open, financeFrame, storedTx }) {
     if (!(await frame.$('.sheet [data-sheettax]'))) throw new Error('the record sheet has no tax tag choice')
     const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
     await frame.setInputFiles('.sheet [data-rcfile]', { name: 'made-up-receipt.png', mimeType: 'image/png', buffer: png })
-    const rid = await pg.waitForFunction((id) => JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id)?.receipts?.[0] || null, costId, { timeout: 10000 }).then((h) => h.jsonValue()).catch(() => null)
+    const rid = await pg.waitForFunction((id) => JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id)?.receipts?.[0] || null, costId, { timeout: 10000 }).then((h) => h.jsonValue()).catch(() => null)
     if (!rid || !/^r-/.test(rid)) throw new Error('the receipt id did not reach the record')
     await frame.waitForSelector(`.sheet .rc-chip.local[data-rid="${rid}"]`, { timeout: 8000 }).catch(async () => { throw new Error(`the receipt does not say it waits for Google Drive: ${await frame.locator('.sheet .rc-row').innerText().catch(() => '')}`) })
     // Kept on this device by Life (IndexedDB life-receipts), never in Finance's data.
     const kept = await pg.evaluate((rid) => new Promise((ok) => { const r = indexedDB.open('life-receipts', 1); r.onsuccess = () => { const g = r.result.transaction('items').objectStore('items').get(rid); g.onsuccess = () => ok(!!g.result?.blob); g.onerror = () => ok(false) }; r.onerror = () => ok(false) }), rid)
     if (!kept) throw new Error('the receipt is not kept on this device')
-    if (/data:image|base64/.test(await pg.evaluate(() => localStorage.getItem('finance-helper.state') || ''))) throw new Error('image data went into Finance Helper\'s data')
+    if (/data:image|base64/.test(await pg.evaluate(() => moneyStore.getItem('finance-helper.state') || ''))) throw new Error('image data went into Finance Helper\'s data')
     // Save the record: the receipt id stays.
     await frame.click('.sheet button[type="submit"]')
     await pg.waitForTimeout(600)
@@ -113,7 +113,7 @@ export async function taxSteps({ step, pg, open, financeFrame, storedTx }) {
     // The first tap asks, the second takes it off.
     if ((await storedTx()).find((t) => t.id === costId)?.receipts?.[0] !== rid) throw new Error('one tap took the receipt off without asking')
     await frame.click(`.sheet [data-rc="remove"][data-rid="${rid}"]`)
-    await pg.waitForFunction((id) => !('receipts' in (JSON.parse(localStorage.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id) || {})), costId, { timeout: 6000 })
+    await pg.waitForFunction((id) => !('receipts' in (JSON.parse(moneyStore.getItem('finance-helper.state') || '{"tx":[]}').tx.find((t) => t.id === id) || {})), costId, { timeout: 6000 })
     await frame.click('.sheet .icon-btn[data-close]').catch(() => {})
   })
 }
